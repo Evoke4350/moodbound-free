@@ -54,6 +54,22 @@ struct NewEntryView: View {
         _selectedMedicationNames = State(initialValue: Set(medicationNames.map { $0.lowercased() }))
         let existingTriggers = entryToEdit?.triggerEvents.compactMap { $0.trigger?.name } ?? []
         _selectedTriggerNames = State(initialValue: Set(existingTriggers.map { $0.lowercased() }))
+
+        // Preserve any weather already attached to the entry being edited.
+        // Without this, fetchWeatherIfNeeded short-circuits on edit, currentWeather
+        // stays nil, and saveAndDismiss writes nil into every weather field —
+        // wiping the original record on every edit.
+        if let entry = entryToEdit, let code = entry.weatherCode, let tempC = entry.temperatureC {
+            let preloaded = WeatherKitWeatherService.CurrentWeather(
+                city: entry.weatherCity ?? "",
+                weatherCode: code,
+                temperatureC: tempC,
+                precipitationMM: entry.precipitationMM ?? 0,
+                summary: entry.weatherSummary ?? ""
+            )
+            _currentWeather = State(initialValue: preloaded)
+            _weatherStatus = State(initialValue: .success)
+        }
     }
 
     var body: some View {
@@ -307,6 +323,16 @@ struct NewEntryView: View {
     private func saveAndDismiss() {
         let saveTimestamp = timestamp
         let saveMoodLevel = moodLevel
+        // Normalize empty strings to nil so a preloaded weather record without a
+        // city doesn't round-trip as "" on save.
+        let weatherCityForSave: String? = {
+            guard let city = currentWeather?.city, !city.isEmpty else { return nil }
+            return city
+        }()
+        let weatherSummaryForSave: String? = {
+            guard let summary = currentWeather?.summary, !summary.isEmpty else { return nil }
+            return summary
+        }()
         do {
             let entry: MoodEntry
             if let entryToEdit {
@@ -318,9 +344,9 @@ struct NewEntryView: View {
                     irritability: irritability,
                     anxiety: anxiety,
                     note: note,
-                    weatherCity: currentWeather?.city,
+                    weatherCity: weatherCityForSave,
                     weatherCode: currentWeather?.weatherCode,
-                    weatherSummary: currentWeather?.summary,
+                    weatherSummary: weatherSummaryForSave,
                     temperatureC: currentWeather?.temperatureC,
                     precipitationMM: currentWeather?.precipitationMM,
                     restingHeartRate: restingHeartRate,
@@ -338,9 +364,9 @@ struct NewEntryView: View {
                     irritability: irritability,
                     anxiety: anxiety,
                     note: note,
-                    weatherCity: currentWeather?.city,
+                    weatherCity: weatherCityForSave,
                     weatherCode: currentWeather?.weatherCode,
-                    weatherSummary: currentWeather?.summary,
+                    weatherSummary: weatherSummaryForSave,
                     temperatureC: currentWeather?.temperatureC,
                     precipitationMM: currentWeather?.precipitationMM,
                     restingHeartRate: restingHeartRate,
@@ -628,13 +654,16 @@ struct NewEntryView: View {
                 for: location, city: ""
             )
 
-            let placemarks = try await placemarksFetch
+            // Reverse geocoding is best-effort: a network blip or throttling
+            // shouldn't fail the whole weather fetch. Treat the city as nil if
+            // the geocoder errors out.
+            let placemarks = (try? await placemarksFetch) ?? []
             let placemark = placemarks.first
-            let cityName = placemark?.locality ?? placemark?.administrativeArea ?? "Unknown"
+            let cityName = placemark?.locality ?? placemark?.administrativeArea
 
             var weather = try await weatherFetch
             weather = WeatherKitWeatherService.CurrentWeather(
-                city: cityName,
+                city: cityName ?? "",
                 weatherCode: weather.weatherCode,
                 temperatureC: weather.temperatureC,
                 precipitationMM: weather.precipitationMM,
