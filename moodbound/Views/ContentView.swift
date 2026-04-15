@@ -8,7 +8,6 @@ struct ContentView: View {
         case today
         case history
         case insights
-        case rephrase
 
         var id: String { rawValue }
 
@@ -17,7 +16,6 @@ struct ContentView: View {
             case .today: return "Today"
             case .history: return "History"
             case .insights: return "Insights"
-            case .rephrase: return "Rephrase"
             }
         }
 
@@ -26,7 +24,6 @@ struct ContentView: View {
             case .today: return "sun.max.fill"
             case .history: return "chart.xyaxis.line"
             case .insights: return "brain.head.profile"
-            case .rephrase: return "bubble.left.and.bubble.right.fill"
             }
         }
     }
@@ -55,9 +52,6 @@ struct ContentView: View {
 
             InsightsView()
                 .tabItem { Label("Insights", systemImage: AppSection.insights.icon) }
-
-            RephraserView()
-                .tabItem { Label("Rephrase", systemImage: AppSection.rephrase.icon) }
         }
     }
 
@@ -77,8 +71,6 @@ struct ContentView: View {
                     HistoryView()
                 case .insights:
                     InsightsView()
-                case .rephrase:
-                    RephraserView()
                 }
             }
         }

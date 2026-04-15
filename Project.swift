@@ -12,13 +12,13 @@ let project = Project(
             deploymentTargets: .iOS("17.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleShortVersionString": .string("1.2.0"),
-                "CFBundleVersion": .string("9"),
+                "CFBundleVersion": .string("10"),
                 "CFBundleIconName": .string("AppIcon"),
                 "UILaunchScreen": .dictionary([:]),
                 "UISupportedInterfaceOrientations": .array([
                     .string("UIInterfaceOrientationPortrait"),
                 ]),
-                "NSLocationWhenInUseUsageDescription": .string("Moodbound uses your location to load local weather context for demo timelines."),
+                "NSLocationWhenInUseUsageDescription": .string("Moodbound uses your location to load current weather conditions for your check-ins."),
                 "NSHealthShareUsageDescription": .string("Moodbound reads sleep, heart rate, HRV, steps, and mindful minutes from Apple Health to enrich your check-ins and improve mood pattern detection."),
                 "NSHealthUpdateUsageDescription": .string("Moodbound writes your mood as a State of Mind entry and records check-ins as mindful sessions in Apple Health."),
                 // Export compliance: moodbound uses only EXEMPT encryption.

@@ -21,6 +21,16 @@ final class LocationService: NSObject, @preconcurrency CLLocationManagerDelegate
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             self.manager.requestLocation()
+
+            // 10-second timeout — prevents indefinite hang when location
+            // services are slow or silently failing (e.g. poor GPS indoors).
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(10))
+                if let pending = self?.continuation {
+                    self?.continuation = nil
+                    pending.resume(throwing: CLError(.locationUnknown))
+                }
+            }
         }
     }
 

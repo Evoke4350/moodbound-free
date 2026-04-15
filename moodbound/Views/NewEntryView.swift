@@ -28,7 +28,7 @@ struct NewEntryView: View {
     @State private var showingSaveError = false
     @State private var saveErrorMessage = ""
     @State private var didApplyDefaults = false
-    @State private var currentWeather: OpenMeteoWeatherService.CurrentWeather?
+    @State private var currentWeather: WeatherKitWeatherService.CurrentWeather?
     @State private var weatherStatus: WeatherFetchStatus = .idle
     @State private var locationService = LocationService()
     @State private var sleepSource: SleepSource = .manual
@@ -622,16 +622,23 @@ struct NewEntryView: View {
 
         do {
             let location = try await locationService.requestOneShotLocation()
-            let placemarks = try await CLGeocoder().reverseGeocodeLocation(location)
+
+            async let placemarksFetch = CLGeocoder().reverseGeocodeLocation(location)
+            async let weatherFetch = WeatherKitWeatherService.fetchCurrentWeather(
+                for: location, city: ""
+            )
+
+            let placemarks = try await placemarksFetch
             let placemark = placemarks.first
             let cityName = placemark?.locality ?? placemark?.administrativeArea ?? "Unknown"
-            let tz = placemark?.timeZone?.identifier ?? TimeZone.current.identifier
 
-            let weather = try await OpenMeteoWeatherService.fetchCurrentWeatherForLocation(
-                latitude: location.coordinate.latitude,
-                longitude: location.coordinate.longitude,
+            var weather = try await weatherFetch
+            weather = WeatherKitWeatherService.CurrentWeather(
                 city: cityName,
-                timezone: tz
+                weatherCode: weather.weatherCode,
+                temperatureC: weather.temperatureC,
+                precipitationMM: weather.precipitationMM,
+                summary: weather.summary
             )
             currentWeather = weather
             weatherStatus = .success
