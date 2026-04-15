@@ -165,13 +165,14 @@ enum InsightEngine {
         )
     }
 
-    // WMO codes that the WeatherKit-backed service can actually emit and that
-    // mean "wet" for the purposes of mood comparison. The previous list was
-    // copied from a former Open-Meteo backend and contained codes (63, 80–82,
-    // 96, 99) the app never produces, while excluding drizzle (51, 56),
-    // freezing rain (66), and sleet (67) — silently dropping those days from
-    // the comparison.
-    private static let rainyWeatherCodes: Set<Int> = [51, 56, 61, 65, 66, 67, 95, 96]
+    // Open-Meteo rainy/precipitation WMO codes, aligned with
+    // OpenMeteoWeatherService.summary(for:).
+    private static let rainyWeatherCodes: Set<Int> = [
+        51, 53, 55, 56, 57, // drizzle
+        61, 63, 65, 66, 67, // rain + freezing rain/sleet
+        80, 81, 82, // rain showers
+        95, 96, 99 // thunderstorms
+    ]
     // Clear-ish sky codes: clear, mostly clear, partly cloudy.
     private static let clearWeatherCodes: Set<Int> = [0, 1, 2]
 

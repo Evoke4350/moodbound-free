@@ -106,4 +106,41 @@ final class InsightEngineTests: XCTestCase {
         XCTAssertEqual(snapshot.lowSleepCount14d, 5)
         XCTAssertEqual(snapshot.highSleepCount14d, 3)
     }
+
+    func testSnapshotRainyDeltaCountsOpenMeteoRainCodes() {
+        let now = Date()
+        let cal = Calendar.current
+        let rainy = MoodEntry(
+            timestamp: cal.date(byAdding: .day, value: -1, to: now)!,
+            moodLevel: -2,
+            energy: 3,
+            sleepHours: 7,
+            irritability: 0,
+            anxiety: 0,
+            note: "",
+            weatherCity: "Seattle",
+            weatherCode: 80, // Open-Meteo rain shower code
+            weatherSummary: "Rain",
+            temperatureC: 12,
+            precipitationMM: 0
+        )
+        let clear = MoodEntry(
+            timestamp: now,
+            moodLevel: 1,
+            energy: 3,
+            sleepHours: 7,
+            irritability: 0,
+            anxiety: 0,
+            note: "",
+            weatherCity: "Seattle",
+            weatherCode: 0,
+            weatherSummary: "Clear",
+            temperatureC: 18,
+            precipitationMM: 0
+        )
+
+        let snapshot = InsightEngine.snapshot(entries: [clear, rainy], now: now)
+        XCTAssertNotNil(snapshot.rainyMoodDelta)
+        XCTAssertEqual(snapshot.rainyMoodDelta ?? 0, -3, accuracy: 0.001)
+    }
 }

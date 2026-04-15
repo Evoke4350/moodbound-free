@@ -30,6 +30,7 @@ struct NewEntryView: View {
     @State private var didApplyDefaults = false
     @State private var currentWeather: OpenMeteoWeatherService.CurrentWeather?
     @State private var weatherStatus: WeatherFetchStatus = .idle
+    @State private var weatherExplicitlyRemoved = false
     @State private var locationService = LocationService()
     @State private var sleepSource: SleepSource = .manual
     @State private var restingHeartRate: Double?
@@ -323,16 +324,11 @@ struct NewEntryView: View {
     private func saveAndDismiss() {
         let saveTimestamp = timestamp
         let saveMoodLevel = moodLevel
-        // Normalize empty strings to nil so a preloaded weather record without a
-        // city doesn't round-trip as "" on save.
-        let weatherCityForSave: String? = {
-            guard let city = currentWeather?.city, !city.isEmpty else { return nil }
-            return city
-        }()
-        let weatherSummaryForSave: String? = {
-            guard let summary = currentWeather?.summary, !summary.isEmpty else { return nil }
-            return summary
-        }()
+        let weatherPayload = NewEntryWeatherPersistence.resolve(
+            entryToEdit: entryToEdit,
+            currentWeather: currentWeather,
+            weatherExplicitlyRemoved: weatherExplicitlyRemoved
+        )
         do {
             let entry: MoodEntry
             if let entryToEdit {
@@ -344,11 +340,11 @@ struct NewEntryView: View {
                     irritability: irritability,
                     anxiety: anxiety,
                     note: note,
-                    weatherCity: weatherCityForSave,
-                    weatherCode: currentWeather?.weatherCode,
-                    weatherSummary: weatherSummaryForSave,
-                    temperatureC: currentWeather?.temperatureC,
-                    precipitationMM: currentWeather?.precipitationMM,
+                    weatherCity: weatherPayload.city,
+                    weatherCode: weatherPayload.code,
+                    weatherSummary: weatherPayload.summary,
+                    temperatureC: weatherPayload.temperatureC,
+                    precipitationMM: weatherPayload.precipitationMM,
                     restingHeartRate: restingHeartRate,
                     hrvSDNN: hrvSDNN,
                     stepCount: stepCount,
@@ -364,11 +360,11 @@ struct NewEntryView: View {
                     irritability: irritability,
                     anxiety: anxiety,
                     note: note,
-                    weatherCity: weatherCityForSave,
-                    weatherCode: currentWeather?.weatherCode,
-                    weatherSummary: weatherSummaryForSave,
-                    temperatureC: currentWeather?.temperatureC,
-                    precipitationMM: currentWeather?.precipitationMM,
+                    weatherCity: weatherPayload.city,
+                    weatherCode: weatherPayload.code,
+                    weatherSummary: weatherPayload.summary,
+                    temperatureC: weatherPayload.temperatureC,
+                    precipitationMM: weatherPayload.precipitationMM,
                     restingHeartRate: restingHeartRate,
                     hrvSDNN: hrvSDNN,
                     stepCount: stepCount,
@@ -603,6 +599,7 @@ struct NewEntryView: View {
                         Button {
                             currentWeather = nil
                             weatherStatus = .skipped
+                            weatherExplicitlyRemoved = true
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -664,6 +661,7 @@ struct NewEntryView: View {
             )
             currentWeather = weather
             weatherStatus = .success
+            weatherExplicitlyRemoved = false
         } catch let error as CLError where error.code == .denied {
             weatherStatus = .denied
         } catch {
