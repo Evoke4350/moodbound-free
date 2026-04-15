@@ -36,6 +36,21 @@ jobs:
 
       - name: Enforce Coverage Floor
         run: |
-          COVERAGE=$(xcrun xccov view --report --json build/TestResults.xcresult | ruby -rjson -e 'targets = JSON.parse(STDIN.read); lines = targets.sum { |t| t["lineCount"].to_f }; covered = targets.sum { |t| t["lineCoverage"].to_f * t["lineCount"].to_f }; pct = lines.zero? ? 0 : (covered / lines * 100.0); puts format("%.2f", pct)')
+          # `xcrun xccov view --report --json` emits a JSON object with a
+          # top-level `targets` array; the previous one-liner treated the
+          # whole object as an array (Hash#sum iterates pairs, so the field
+          # lookups all returned nil → 0.0) and also used the wrong per-target
+          # field name (`lineCount` instead of `executableLines`). Net effect:
+          # coverage was always reported as 0.00% and this step always failed.
+          # We also exclude test-bundle targets so app coverage isn't diluted
+          # by the tests covering themselves.
+          COVERAGE=$(xcrun xccov view --report --json build/TestResults.xcresult | ruby -rjson -e '
+            report = JSON.parse(STDIN.read)
+            targets = (report["targets"] || []).reject { |t| t["name"].to_s =~ /[Tt]ests?\.xctest$/ }
+            lines = targets.sum { |t| t["executableLines"].to_f }
+            covered = targets.sum { |t| t["coveredLines"].to_f }
+            pct = lines.zero? ? 0 : (covered / lines * 100.0)
+            puts format("%.2f", pct)
+          ')
           echo "Coverage: ${COVERAGE}%"
           awk -v c="$COVERAGE" 'BEGIN { if (c + 0 < 45) { print "Coverage floor not met: " c "% < 45%"; exit 1 } }'
