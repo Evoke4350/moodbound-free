@@ -1,0 +1,39 @@
+name: iOS CI
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tuist
+        run: curl -Ls https://install.tuist.io | bash
+
+      - name: Add Tuist to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Generate Project
+        run: tuist generate --path .
+
+      - name: Run Tests with Coverage
+        run: |
+          mkdir -p build
+          xcodebuild \
+            -scheme moodbound \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -enableCodeCoverage YES \
+            -resultBundlePath build/TestResults.xcresult \
+            test
+
+      - name: Enforce Coverage Floor
+        run: |
+          COVERAGE=$(xcrun xccov view --report --json build/TestResults.xcresult | ruby -rjson -e 'targets = JSON.parse(STDIN.read); lines = targets.sum { |t| t["lineCount"].to_f }; covered = targets.sum { |t| t["lineCoverage"].to_f * t["lineCount"].to_f }; pct = lines.zero? ? 0 : (covered / lines * 100.0); puts format("%.2f", pct)')
+          echo "Coverage: ${COVERAGE}%"
+          awk -v c="$COVERAGE" 'BEGIN { if (c + 0 < 45) { print "Coverage floor not met: " c "% < 45%"; exit 1 } }'

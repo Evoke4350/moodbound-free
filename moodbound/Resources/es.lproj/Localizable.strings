@@ -1,0 +1,23 @@
+"reminder.default_message" = "Es hora de registrar tu estado de ánimo.";
+"reminder.title" = "Registro de estado de ánimo";
+
+/* Mensajes de crisis — mostrados cuando BayesianSafetyEngine detecta severidad alta/crítica.
+   El tono debe ser de apoyo y específico, nunca directivo o clínico. */
+"safety.critical_crisis" = "Si estás en crisis ahora mismo, por favor busca apoyo — con alguien de confianza, una línea de crisis o los servicios de emergencia locales. No tienes que pasar por esto solo/a.";
+"safety.high_crisis" = "Las cosas parecen estar escalando rápido. Hablar hoy con tu equipo de atención o con una persona de confianza puede ayudar — incluso un mensaje breve cuenta.";
+
+/* Texto de respaldo usado cuando SafetyCopyPolicy.sanitizeMessage bloquea una frase prohibida. */
+"safety.sanitized_fallback" = "Algunos de tus registros recientes sugieren que revisar tu plan de seguridad podría ayudar.";
+
+/* Resumen del panorama — fuente única de verdad para HomeView e InsightsView. */
+"outlook.summary.rough" = "Las cosas se sienten más movidas de lo usual. Mantener un sueño estable y registrar con más frecuencia puede ayudar esta semana.";
+"outlook.summary.bumpy" = "Algunos altibajos últimamente. Mantener tu rutina ayudará — atenta/o a cambios bruscos.";
+"outlook.summary.low_sleep_watch" = "En general estable, pero algunas noches de poco sueño podrían desbalancear las cosas. Cuida tu descanso.";
+"outlook.summary.steady" = "Estás en un buen ritmo ahora mismo. Sigue así.";
+
+/* Tooltip de confianza de datos. */
+"insights.data_confidence.tooltip" = "Más registros = imagen más nítida. Sigue registrando y tus insights mejorarán.";
+
+/* Introducción al plan de seguridad. */
+"safety_plan.intro.title" = "¿Qué es un plan de seguridad?";
+"safety_plan.intro.body" = "Una nota breve para momentos difíciles: las señales de alerta que quieres notar, las cosas que te ayudan a estabilizarte y las personas a las que puedes acudir. No tienes que completarlo todo de una vez.";

@@ -1,0 +1,25 @@
+"reminder.default_message" = "Time for your mood check-in.";
+"reminder.title" = "Mood Check-In";
+
+/* Crisis banners — shown when BayesianSafetyEngine flags high/critical severity.
+   Tone must be supportive and specific, never directive or clinical. */
+"safety.critical_crisis" = "If you're in crisis right now, please reach out — to someone you trust, a crisis line, or local emergency services. You don't have to face this alone.";
+"safety.high_crisis" = "Things feel like they're escalating quickly. Reaching out to your care team or a trusted person today can help — even a short check-in counts.";
+
+/* Fallback message shown when SafetyCopyPolicy.sanitizeMessage blocks a prohibited fragment.
+   This is the worst-case copy the user will ever see from the safety engine, so it must still feel warm. */
+"safety.sanitized_fallback" = "Some of your recent check-ins suggest it might help to revisit your safety plan.";
+
+/* Outlook summary — single source of truth for the HomeView and InsightsView outlook cards.
+   Bands must match HomeView.outlookBand / InsightsView.outlookBand: rough (≥70), bumpy (≥40), low-sleep-watch, steady. */
+"outlook.summary.rough" = "Things feel choppier than usual. Keeping sleep steady and checking in more often can help this week.";
+"outlook.summary.bumpy" = "Some ups and downs lately. Sticking to your routine will help — watch for any sudden changes.";
+"outlook.summary.low_sleep_watch" = "Mostly steady, but a few short-sleep nights could tip things. Keep an eye on rest.";
+"outlook.summary.steady" = "You're in a good rhythm right now. Keep it up.";
+
+/* Data confidence tooltip shown under the concern-level / data-confidence / predictability row. */
+"insights.data_confidence.tooltip" = "More entries = sharper picture. Keep logging and your insights will get better.";
+
+/* Safety Plan onboarding — shown above the form in SafetyPlanView when there is no existing plan yet. */
+"safety_plan.intro.title" = "What's a safety plan?";
+"safety_plan.intro.body" = "A short note-to-self for rough moments: the warning signs you want to notice, the things that help you steady, and the people you can reach out to. You don't have to fill everything in at once.";

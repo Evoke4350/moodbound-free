@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# Xcode user state
+*.xcuserstate
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+build/
+DerivedData/
+*.ipa
+*.xcarchive
+*.dSYM.zip
+*.dSYM
+
+# Tuist-generated
+Derived/
+*.xcodeproj
+*.xcworkspace
+!Tuist/
+.tuist-version
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+Package.pins
+Package.resolved
+.build/
+
+# Python (for Scripts/*.py)
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Secrets / local config
+.env
+.env.*
+*.p8
