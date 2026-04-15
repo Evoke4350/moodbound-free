@@ -628,6 +628,7 @@ struct NewEntryView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Retry") {
+                        weatherStatus = .idle
                         Task { await fetchWeatherIfNeeded() }
                     }
                     .font(.subheadline)
