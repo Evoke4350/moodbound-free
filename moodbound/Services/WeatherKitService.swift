@@ -74,8 +74,12 @@ enum WeatherKitWeatherService {
             return 71
         case .heavySnow, .blizzard:
             return 75
-        case .sleet, .hail, .wintryMix:
-            return 77
+        case .sleet, .wintryMix:
+            // WMO 67: rain & snow / ice pellets — sleet is icy rain, not snow grains (77).
+            return 67
+        case .hail:
+            // WMO 96: thunderstorm with slight hail.
+            return 96
         case .thunderstorms, .isolatedThunderstorms, .scatteredThunderstorms,
              .strongStorms, .tropicalStorm, .hurricane:
             return 95
@@ -100,9 +104,12 @@ enum WeatherKitWeatherService {
             return "Drizzle"
         case .rain, .heavyRain, .freezingRain:
             return "Rain"
-        case .snow, .heavySnow, .flurries, .blizzard, .blowingSnow,
-             .sleet, .hail, .sunFlurries, .wintryMix:
+        case .snow, .heavySnow, .flurries, .blizzard, .blowingSnow, .sunFlurries:
             return "Snow"
+        case .sleet, .wintryMix:
+            return "Sleet"
+        case .hail:
+            return "Hail"
         case .thunderstorms, .isolatedThunderstorms, .scatteredThunderstorms,
              .strongStorms, .tropicalStorm, .hurricane:
             return "Thunderstorm"

@@ -165,12 +165,26 @@ enum InsightEngine {
         )
     }
 
+    // WMO codes that the WeatherKit-backed service can actually emit and that
+    // mean "wet" for the purposes of mood comparison. The previous list was
+    // copied from a former Open-Meteo backend and contained codes (63, 80–82,
+    // 96, 99) the app never produces, while excluding drizzle (51, 56),
+    // freezing rain (66), and sleet (67) — silently dropping those days from
+    // the comparison.
+    private static let rainyWeatherCodes: Set<Int> = [51, 56, 61, 65, 66, 67, 95, 96]
+    // Clear-ish sky codes: clear, mostly clear, partly cloudy.
+    private static let clearWeatherCodes: Set<Int> = [0, 1, 2]
+
     private static func weatherSummary(entries: [MoodEntry]) -> (city: String?, coverageDays: Int, rainyMoodDelta: Double?, hotMoodDelta: Double?) {
         let weatherEntries = entries.filter { $0.weatherCode != nil && $0.temperatureC != nil }
         guard !weatherEntries.isEmpty else { return (nil, 0, nil, nil) }
 
-        let rainy = weatherEntries.filter { ($0.precipitationMM ?? 0) >= 1 || [61, 63, 65, 80, 81, 82, 95, 96, 99].contains($0.weatherCode ?? -1) }
-        let clear = weatherEntries.filter { ($0.precipitationMM ?? 0) < 0.5 && [0, 1].contains($0.weatherCode ?? -1) }
+        let rainy = weatherEntries.filter {
+            ($0.precipitationMM ?? 0) >= 1 || rainyWeatherCodes.contains($0.weatherCode ?? -1)
+        }
+        let clear = weatherEntries.filter {
+            ($0.precipitationMM ?? 0) < 0.5 && clearWeatherCodes.contains($0.weatherCode ?? -1)
+        }
         let rainyDelta: Double? = {
             guard !rainy.isEmpty, !clear.isEmpty else { return nil }
             let rainyAvg = Double(rainy.reduce(0) { $0 + $1.moodLevel }) / Double(rainy.count)
@@ -187,7 +201,11 @@ enum InsightEngine {
             return hotAvg - mildAvg
         }()
 
-        let city = weatherEntries.compactMap(\.weatherCity).first
+        // Skip placeholders that older builds may have persisted as a literal
+        // city name when reverse geocoding failed.
+        let city = weatherEntries
+            .compactMap(\.weatherCity)
+            .first { !$0.isEmpty && $0.caseInsensitiveCompare("Unknown") != .orderedSame }
         return (city, weatherEntries.count, rainyDelta, hotDelta)
     }
 }
