@@ -28,7 +28,7 @@ struct NewEntryView: View {
     @State private var showingSaveError = false
     @State private var saveErrorMessage = ""
     @State private var didApplyDefaults = false
-    @State private var currentWeather: WeatherKitWeatherService.CurrentWeather?
+    @State private var currentWeather: OpenMeteoWeatherService.CurrentWeather?
     @State private var weatherStatus: WeatherFetchStatus = .idle
     @State private var locationService = LocationService()
     @State private var sleepSource: SleepSource = .manual
@@ -60,7 +60,7 @@ struct NewEntryView: View {
         // stays nil, and saveAndDismiss writes nil into every weather field —
         // wiping the original record on every edit.
         if let entry = entryToEdit, let code = entry.weatherCode, let tempC = entry.temperatureC {
-            let preloaded = WeatherKitWeatherService.CurrentWeather(
+            let preloaded = OpenMeteoWeatherService.CurrentWeather(
                 city: entry.weatherCity ?? "",
                 weatherCode: code,
                 temperatureC: tempC,
@@ -650,25 +650,17 @@ struct NewEntryView: View {
         do {
             let location = try await locationService.requestOneShotLocation()
 
-            async let placemarksFetch = CLGeocoder().reverseGeocodeLocation(location)
-            async let weatherFetch = WeatherKitWeatherService.fetchCurrentWeather(
-                for: location, city: ""
-            )
-
-            // Reverse geocoding is best-effort: a network blip or throttling
-            // shouldn't fail the whole weather fetch. Treat the city as nil if
-            // the geocoder errors out.
-            let placemarks = (try? await placemarksFetch) ?? []
+            // Reverse geocoding is best-effort
+            let placemarks = (try? await CLGeocoder().reverseGeocodeLocation(location)) ?? []
             let placemark = placemarks.first
-            let cityName = placemark?.locality ?? placemark?.administrativeArea
+            let cityName = placemark?.locality ?? placemark?.administrativeArea ?? ""
+            let tz = placemark?.timeZone?.identifier ?? TimeZone.current.identifier
 
-            var weather = try await weatherFetch
-            weather = WeatherKitWeatherService.CurrentWeather(
-                city: cityName ?? "",
-                weatherCode: weather.weatherCode,
-                temperatureC: weather.temperatureC,
-                precipitationMM: weather.precipitationMM,
-                summary: weather.summary
+            let weather = try await OpenMeteoWeatherService.fetchCurrentWeatherForLocation(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                city: cityName,
+                timezone: tz
             )
             currentWeather = weather
             weatherStatus = .success
