@@ -6,6 +6,7 @@ struct HomeView: View {
     @Query(sort: \MoodEntry.timestamp, order: .reverse) private var entries: [MoodEntry]
     @State private var showingNewEntry = false
     @State private var showingSettings = false
+    @State private var showingSafetyPlan = false
     @State private var viewModel = MoodViewModel()
     @AppStorage(AppClock.overrideTimestampKey) private var overrideTimestamp: Double = 0
 
@@ -28,6 +29,16 @@ struct HomeView: View {
             }
             .navigationTitle("Today")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingSafetyPlan = true
+                    } label: {
+                        Image(systemName: "cross.case.fill")
+                            .foregroundStyle(.red.opacity(0.85))
+                    }
+                    .accessibilityLabel("Safety Plan")
+                    .accessibilityIdentifier("safety-plan-button")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingSettings = true
@@ -42,6 +53,9 @@ struct HomeView: View {
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showingSafetyPlan) {
+                SafetyPlanView()
             }
         }
         .animation(.smooth(duration: 0.28), value: entries.count)
