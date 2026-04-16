@@ -127,17 +127,25 @@ struct ClinicianReportView: View {
 
     private func generate() {
         state = .generating
-        generateTask = Task {
+        let range = dateRange
+        let ctx = context
+        generateTask = Task.detached(priority: .userInitiated) {
             do {
-                let data = try ClinicianReportService.snapshot(for: dateRange, context: context)
-                let url = try ClinicianReportService.render(data)
-                state = .ready(url)
+                // snapshot() runs the full InsightEngine pipeline (HMM,
+                // Bayesian, etc.) — keep it off the main actor so the
+                // progress spinner can animate.
+                let data = try ClinicianReportService.snapshot(for: range, context: ctx)
+                // render() needs the main actor for ImageRenderer.
+                let url = try await MainActor.run {
+                    try ClinicianReportService.render(data)
+                }
+                await MainActor.run { state = .ready(url) }
             } catch let error as ClinicianReportError {
-                state = .error(error.localizedDescription ?? "Unknown error")
+                await MainActor.run { state = .error(error.localizedDescription) }
             } catch is CancellationError {
-                state = .idle
+                await MainActor.run { state = .idle }
             } catch {
-                state = .error(error.localizedDescription)
+                await MainActor.run { state = .error(error.localizedDescription) }
             }
         }
     }

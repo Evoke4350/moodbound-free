@@ -1,11 +1,17 @@
 import Foundation
 import SwiftData
 
+struct DailyMoodPoint: Identifiable {
+    let id: Date  // startOfDay
+    let averageMood: Double
+}
+
 struct ClinicianReportData {
     let range: DateInterval
     let generatedAt: Date
     let entryCount: Int
     let distinctDays: Int
+    let dailyMoodPoints: [DailyMoodPoint]
     let snapshot: InsightSnapshot
     let safetyPlanText: SafetyPlanText?
     let supportContacts: [SupportContactInfo]
@@ -18,7 +24,8 @@ struct SafetyPlanText {
     let emergencySteps: String
 }
 
-struct SupportContactInfo {
+struct SupportContactInfo: Identifiable {
+    let id = UUID()
     let name: String
     let relationship: String
     let phone: String
@@ -60,6 +67,13 @@ enum ClinicianReportService {
             throw ClinicianReportError.insufficientData(distinctDays: distinctDays)
         }
 
+        // Aggregate mood by day for the chart on page 2.
+        let grouped = Dictionary(grouping: entries) { calendar.startOfDay(for: $0.timestamp) }
+        let dailyMoodPoints = grouped.map { day, dayEntries in
+            let avg = Double(dayEntries.reduce(0) { $0 + $1.moodLevel }) / Double(dayEntries.count)
+            return DailyMoodPoint(id: day, averageMood: avg)
+        }.sorted { $0.id < $1.id }
+
         let insightSnapshot = InsightEngine.snapshot(entries: entries, now: end)
 
         // Fetch safety plan + contacts for page 3.
@@ -87,6 +101,7 @@ enum ClinicianReportService {
             generatedAt: Date(),
             entryCount: entries.count,
             distinctDays: distinctDays,
+            dailyMoodPoints: dailyMoodPoints,
             snapshot: insightSnapshot,
             safetyPlanText: safetyPlanText,
             supportContacts: contactInfos,

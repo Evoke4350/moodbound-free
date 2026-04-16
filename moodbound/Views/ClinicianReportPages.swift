@@ -218,6 +218,23 @@ struct ReportPageTwo: View {
                 )
                 .foregroundStyle(latentColor(posterior.distribution.dominantState).opacity(0.1))
             }
+
+            // Mood line
+            ForEach(data.dailyMoodPoints) { point in
+                LineMark(
+                    x: .value("Day", point.id, unit: .day),
+                    y: .value("Mood", point.averageMood)
+                )
+                .foregroundStyle(Color.primary.opacity(0.8))
+                .lineStyle(StrokeStyle(lineWidth: 1.5))
+
+                PointMark(
+                    x: .value("Day", point.id, unit: .day),
+                    y: .value("Mood", point.averageMood)
+                )
+                .symbolSize(12)
+                .foregroundStyle(Color.primary.opacity(0.6))
+            }
         }
         .chartYScale(domain: -3...3)
         .chartYAxis {
@@ -370,7 +387,7 @@ struct ReportPageThree: View {
                     Text("Support Contacts")
                         .font(.system(size: 9, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
-                    ForEach(data.supportContacts, id: \.name) { contact in
+                    ForEach(data.supportContacts) { contact in
                         Text("\(contact.name)\(contact.relationship.isEmpty ? "" : " (\(contact.relationship))") — \(contact.phone)\(contact.isPrimary ? " ★" : "")")
                             .font(.system(size: 9, design: .rounded))
                     }
