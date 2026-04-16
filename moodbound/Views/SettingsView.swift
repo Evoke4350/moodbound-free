@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var errorMessage = ""
     @State private var showingSuccess = false
     @State private var successMessage = ""
+    @State private var showingReport = false
 
     var body: some View {
         NavigationStack {
@@ -61,6 +62,18 @@ struct SettingsView: View {
 
                 Section {
                     Button {
+                        showingReport = true
+                    } label: {
+                        Label("Share with Doctor", systemImage: "doc.richtext")
+                    }
+                } header: {
+                    Text("Reports")
+                } footer: {
+                    Text("Generate a PDF summary of your mood data to bring to an appointment.")
+                }
+
+                Section {
+                    Button {
                         exportData()
                     } label: {
                         Label("Export Data", systemImage: "square.and.arrow.up")
@@ -83,6 +96,9 @@ struct SettingsView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showingReport) {
+                ClinicianReportView()
             }
             .fileExporter(
                 isPresented: $showingExporter,
