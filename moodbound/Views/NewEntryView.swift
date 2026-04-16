@@ -403,7 +403,7 @@ struct NewEntryView: View {
 
             // Show brief feedback before dismissing so the user knows
             // the entry mattered — streak, outlook, and a one-liner.
-            let feedback = buildSavedFeedback()
+            let feedback = buildSavedFeedback(including: entry)
             if entryToEdit != nil {
                 // Edits don't need the feedback flourish.
                 dismiss()
@@ -797,15 +797,19 @@ struct NewEntryView: View {
         }
     }
 
-    private func buildSavedFeedback() -> SavedFeedback {
+    private func buildSavedFeedback(including newEntry: MoodEntry) -> SavedFeedback {
         let vm = MoodViewModel()
         let now = AppClock.now
-        let streak = vm.streakDays(entries: recentEntries, now: now)
+        // recentEntries is a @Query that won't refresh until the next view
+        // update cycle, so it doesn't include the entry we just saved.
+        // Prepend it manually so streak and outlook reflect the new entry.
+        let allEntries = [newEntry] + recentEntries
+        let streak = vm.streakDays(entries: allEntries, now: now)
 
         // Compute a lightweight outlook if we have enough data.
         var outlookPct: Int?
-        if recentEntries.count >= 3 {
-            let snapshot = InsightEngine.snapshot(entries: Array(recentEntries), now: now)
+        if allEntries.count >= 3 {
+            let snapshot = InsightEngine.snapshot(entries: allEntries, now: now)
             let risk = snapshot.safety.posteriorRisk
             outlookPct = Int((risk * 100).rounded())
         }

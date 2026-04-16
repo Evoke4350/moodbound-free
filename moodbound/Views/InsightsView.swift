@@ -346,13 +346,24 @@ struct InsightsView: View {
         }
     }
 
+    // Map the jargon labels from DirectionalSignalService into natural prose.
+    private static let friendlyProbeLabels: [String: String] = [
+        "Sleep Deficit": "sleep drops",
+        "Next-Day Mood Elevation": "mood shifts upward",
+        "Trigger Load": "trigger load rises",
+        "Next-Day Anxiety": "anxiety increases",
+        "Medication Adherence": "you take your meds consistently",
+        "Next-Day Volatility (inverse)": "your stability improves",
+    ]
+
     private func patternStories(snapshot: InsightSnapshot) -> [String] {
         var stories: [String] = []
 
-        // Directional signal: "When your X changes, Y tends to follow."
+        // Directional signal: "When your sleep drops, your mood tends to shift upward ~1 day later."
         if let probe = snapshot.directionalProbes.first, probe.confidence >= 0.3 {
-            let direction = probe.strength > 0 ? "rise" : "dip"
-            stories.append("When your \(probe.source.lowercased()) shifts, your \(probe.target.lowercased()) tends to \(direction) about \(probe.lagDays) day\(probe.lagDays == 1 ? "" : "s") later.")
+            let source = Self.friendlyProbeLabels[probe.source] ?? probe.source.lowercased()
+            let target = Self.friendlyProbeLabels[probe.target] ?? probe.target.lowercased()
+            stories.append("When your \(source), your \(target) about \(probe.lagDays) day\(probe.lagDays == 1 ? "" : "s") later.")
         }
 
         // Top trigger: "X is your strongest mood-affecting trigger."
