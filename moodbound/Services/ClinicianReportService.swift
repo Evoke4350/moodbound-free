@@ -1,5 +1,7 @@
 import Foundation
 import SwiftData
+import SwiftUI
+import UIKit
 
 struct DailyMoodPoint: Identifiable {
     let id: Date  // startOfDay
