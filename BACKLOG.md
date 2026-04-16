@@ -27,15 +27,17 @@ Things the app already has but that are hard to reach or feel unfinished.
       the button to reach your own plan shouldn't require the engine to
       flag you first.
 
-### 0.2 Weather card: fix or remove the stub
-- [-] The weather impact card on Insights renders as just a title when
-      there isn't enough data diversity for the rain/heat comparison.
-      Options:
-      - **(A)** Remove from Insights, keep in the clinician PDF only.
-      - **(B)** Demote to a one-liner on the outlook card.
-      - **(C)** Suppress below 7 weather days; show a "still gathering"
-        hint when deltas are nil.
-- [-] Needs decision: pick A, B, or C.
+### 0.2 Weather card: finish it properly
+- [ ] Add a proper empty state: when `weatherCoverageDays > 0` but one
+      or both deltas are nil, show a hint in place of the missing row
+      ("Log a few more entries in different weather to see the effect")
+      instead of rendering an empty card.
+- [ ] Suppress the card entirely when `weatherCoverageDays < 7` — below
+      that threshold there's genuinely nothing useful to show yet.
+- [ ] Consider richer weather content beyond the two delta rows: a
+      temperature-vs-mood mini scatter, per-condition breakdown (cloudy,
+      foggy, snowy — not just rain/clear), or a small weather sparkline
+      alongside mood entries.
 
 ---
 
@@ -144,17 +146,24 @@ the friction of logging compounds everything else.
 
 ---
 
-## P5 — Understand the Tool
+## P5 — Weather & Environment
 
-### 5.1 Data quality card
+### 5.1 Richer weather insights
+- [ ] Per-condition breakdown: expand beyond rain/clear and hot/mild to
+      show cloudy, foggy, snowy, windy effects when enough data exists.
+      The WMO code mapping already distinguishes these conditions.
+- [ ] Temperature-vs-mood visualization: small scatter or overlaid line
+      showing the correlation, not just a single delta number.
+- [ ] Seasonal patterns: with 6+ months of data, detect month-level
+      mood trends and surface "historically your mood dips in [month]."
+      Month-binned comparison against overall baseline.
+- [ ] Barometric pressure correlation if Apple ever exposes it via
+      WeatherKit or HealthKit (future-looking).
+
+### 5.2 Data quality card
 - [ ] Surface `ModelHealthService` metrics on Insights: entries logged,
       coverage, forecast accuracy, calibration trend. Helps you see
       that more logging → tighter predictions.
-
-### 5.2 Seasonal patterns
-- [ ] With 6+ months of data, detect month-level mood patterns and
-      surface "historically your mood dips in [month]." Simple
-      month-binned comparison, no new service needed.
 
 ---
 
