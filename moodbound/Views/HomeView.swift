@@ -16,6 +16,7 @@ struct HomeView: View {
                     greetingCard
                     if let snapshot = insightSnapshot {
                         todayOutlookCard(snapshot: snapshot)
+                        phaseNudgeCard(snapshot: snapshot)
                     }
                     quickAction
                     statsGrid
@@ -137,6 +138,80 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .moodCard()
+    }
+
+    @ViewBuilder
+    private func phaseNudgeCard(snapshot: InsightSnapshot) -> some View {
+        if let nudge = phaseNudge(snapshot: snapshot) {
+            HStack(spacing: 10) {
+                Image(systemName: nudge.icon)
+                    .font(.title3)
+                    .foregroundStyle(nudge.tint)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(nudge.headline)
+                        .font(.subheadline.weight(.semibold))
+                    Text(nudge.body)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .moodCard()
+        }
+    }
+
+    private struct PhaseNudge {
+        let icon: String
+        let tint: Color
+        let headline: String
+        let body: String
+    }
+
+    private func phaseNudge(snapshot: InsightSnapshot) -> PhaseNudge? {
+        guard let latest = snapshot.latentPosteriors.last else { return nil }
+        let state = latest.distribution.dominantState
+        let confidence = latest.distribution[state]
+
+        // Only show if the model is reasonably confident (>40%).
+        guard confidence > 0.4 else { return nil }
+
+        switch state {
+        case .stable:
+            let streak = snapshot.streakDays
+            if streak >= 7 {
+                return PhaseNudge(
+                    icon: "leaf.fill",
+                    tint: .green,
+                    headline: "Things look steady",
+                    body: "\(streak)-day streak and your patterns are holding. A good stretch."
+                )
+            }
+            return nil // Don't clutter when stable and streak is short.
+
+        case .elevated:
+            return PhaseNudge(
+                icon: "arrow.up.forward",
+                tint: .orange,
+                headline: "Your patterns are running a bit high",
+                body: "Worth paying attention to sleep and energy over the next few days."
+            )
+
+        case .depressive:
+            return PhaseNudge(
+                icon: "cloud.fill",
+                tint: .blue,
+                headline: "Your patterns have been on the low side",
+                body: "Take it easy. Even a short entry helps track how this unfolds."
+            )
+
+        case .unstable:
+            return PhaseNudge(
+                icon: "arrow.up.arrow.down",
+                tint: .purple,
+                headline: "Your patterns have been shifting around",
+                body: "Some choppiness in your recent data. Sleep and routine can help settle things."
+            )
+        }
     }
 
     private var statsGrid: some View {
