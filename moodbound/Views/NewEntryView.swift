@@ -27,6 +27,7 @@ struct NewEntryView: View {
     @State private var newlyAddedTriggers: Set<String> = []
     @State private var showingSaveError = false
     @State private var saveErrorMessage = ""
+    @State private var savedFeedback: SavedFeedback?
     @State private var didApplyDefaults = false
     @State private var currentWeather: OpenMeteoWeatherService.CurrentWeather?
     @State private var weatherStatus: WeatherFetchStatus = .idle
@@ -318,6 +319,13 @@ struct NewEntryView: View {
             } message: {
                 Text(saveErrorMessage)
             }
+            .overlay {
+                if let feedback = savedFeedback {
+                    savedFeedbackOverlay(feedback)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+            .animation(.easeOut(duration: 0.25), value: savedFeedback != nil)
         }
     }
 
@@ -393,7 +401,19 @@ struct NewEntryView: View {
                 }
             }
 
-            dismiss()
+            // Show brief feedback before dismissing so the user knows
+            // the entry mattered — streak, outlook, and a one-liner.
+            let feedback = buildSavedFeedback(including: entry)
+            if entryToEdit != nil {
+                // Edits don't need the feedback flourish.
+                dismiss()
+            } else {
+                savedFeedback = feedback
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    dismiss()
+                }
+            }
         } catch {
             AppLogger.error("Failed to save mood entry", error: error)
             saveErrorMessage = error.localizedDescription
@@ -776,6 +796,70 @@ struct NewEntryView: View {
         default: return "🌡️"
         }
     }
+
+    private func buildSavedFeedback(including newEntry: MoodEntry) -> SavedFeedback {
+        let vm = MoodViewModel()
+        let now = AppClock.now
+        // recentEntries is a @Query that won't refresh until the next view
+        // update cycle, so it doesn't include the entry we just saved.
+        // Prepend it manually so streak and outlook reflect the new entry.
+        let allEntries = [newEntry] + recentEntries
+        let streak = vm.streakDays(entries: allEntries, now: now)
+
+        // Compute a lightweight outlook if we have enough data.
+        var outlookPct: Int?
+        if allEntries.count >= 3 {
+            let snapshot = InsightEngine.snapshot(entries: allEntries, now: now)
+            let risk = snapshot.safety.posteriorRisk
+            outlookPct = Int((risk * 100).rounded())
+        }
+
+        let message: String
+        if streak > 1 {
+            message = "\(streak)-day streak. Keep it going."
+        } else {
+            message = "First entry in a while. Good to see you."
+        }
+
+        return SavedFeedback(streakDays: streak, outlookPct: outlookPct, message: message)
+    }
+
+    @ViewBuilder
+    private func savedFeedbackOverlay(_ feedback: SavedFeedback) -> some View {
+        ZStack {
+            Color(.systemBackground).opacity(0.92)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.green)
+
+                Text("Logged")
+                    .font(.title2.weight(.bold))
+
+                if let pct = feedback.outlookPct {
+                    Text("7-day outlook: \(pct)%")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(feedback.message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(32)
+        }
+        .onTapGesture { dismiss() }
+        .accessibilityLabel("Entry saved. \(feedback.message)")
+    }
+}
+
+struct SavedFeedback {
+    let streakDays: Int
+    let outlookPct: Int?
+    let message: String
 }
 
 enum WeatherFetchStatus {
