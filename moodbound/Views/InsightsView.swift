@@ -105,6 +105,7 @@ struct InsightsView: View {
         monthOverMonthCard
         weatherImpactCard(snapshot: snapshot)
         warningCard(snapshot: snapshot)
+        safetyPlanCard
         modelTransparencyCard(snapshot: snapshot)
         phenotypeCard(snapshot: snapshot)
         directionalCard(snapshot: snapshot)
@@ -227,12 +228,6 @@ struct InsightsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-
-                    Button("Open Safety Plan") {
-                        showingSafetyPlan = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("open-safety-plan-button")
 
                     if let crisisText = safety.crisisBannerText {
                         Text(crisisText)
@@ -390,9 +385,36 @@ struct InsightsView: View {
         return stories
     }
 
+    private var safetyPlanCard: some View {
+        Button {
+            showingSafetyPlan = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "cross.case.fill")
+                    .font(.title3)
+                    .foregroundStyle(.red.opacity(0.85))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Safety Plan")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("Your warning signs, coping strategies, and contacts")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .accessibilityIdentifier("open-safety-plan-button")
+        .moodCard()
+    }
+    }
+
     private func weatherImpactCard(snapshot: InsightSnapshot) -> some View {
         Group {
-            if snapshot.weatherCoverageDays > 0 {
+            if snapshot.weatherCoverageDays >= 7 {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Weather & Mood")
                         .font(.headline)
@@ -416,6 +438,8 @@ struct InsightsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    } else {
+                        weatherGatheringHint("rain vs. clear sky")
                     }
 
                     if let hotDelta = snapshot.hotMoodDelta {
@@ -434,11 +458,23 @@ struct InsightsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    } else {
+                        weatherGatheringHint("hot vs. mild days")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .moodCard()
             }
+        }
+    }
+
+    private func weatherGatheringHint(_ comparison: String) -> some View {
+        HStack(spacing: 8) {
+            Text("📊")
+                .font(.title2)
+            Text("Log a few more entries in different weather to see how \(comparison) affect your mood.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
