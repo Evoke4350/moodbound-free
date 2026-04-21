@@ -33,14 +33,18 @@ enum ConformalCalibrationService {
 
     private static func proxyRisk(_ vector: TemporalFeatureVector) -> Double {
         let mood = abs(vector.moodLevel) / 3.0
-        let sleep = max(0, (6.0 - vector.sleepHours) / 3.0)
+        // sleepHours == 0 is the app's "unknown" sentinel; treat as neutral
+        // instead of "6h deficit" so skipped sleep entries don't inflate risk.
+        let sleep = vector.sleepHours > 0 ? max(0, (6.0 - vector.sleepHours) / 3.0) : 0
         let volatility = min(1, (vector.volatility7d ?? 0.5) / 1.5)
         return clamp((0.45 * mood) + (0.35 * sleep) + (0.2 * volatility))
     }
 
     private static func proxyOutcome(_ vector: TemporalFeatureVector) -> Double {
         let manicOrDepressive = abs(vector.moodLevel) >= 2.0
-        let severeSleep = vector.sleepHours <= 5.0 || vector.sleepHours >= 10.5
+        // Same unknown convention: don't fire "severe sleep" just because the
+        // user skipped logging sleep that day.
+        let severeSleep = vector.sleepHours > 0 && (vector.sleepHours <= 5.0 || vector.sleepHours >= 10.5)
         let elevatedAnxiety = vector.anxiety >= 2.5
         return (manicOrDepressive || severeSleep || elevatedAnxiety) ? 1.0 : 0.0
     }

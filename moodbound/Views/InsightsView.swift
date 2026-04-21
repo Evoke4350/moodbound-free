@@ -498,7 +498,7 @@ struct InsightsView: View {
 
     private func outlookCard(snapshot: InsightSnapshot) -> some View {
         let score = outlookScore(snapshot: snapshot)
-        let band = outlookBand(for: score)
+        let band = outlookBand(for: score, evidenceLevel: snapshot.evidenceLevel)
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -514,7 +514,7 @@ struct InsightsView: View {
                     .clipShape(Capsule())
             }
 
-            Text(stabilityLabel(score: score))
+            Text(stabilityLabel(score: score, evidenceLevel: snapshot.evidenceLevel))
                 .font(.title3.weight(.bold))
 
             outcomeMeter(score: score, color: band.color)
@@ -1019,6 +1019,7 @@ struct InsightsView: View {
     }
 
     private func scoreTrend(snapshot: InsightSnapshot) -> String {
+        if snapshot.evidenceLevel == .insufficient { return "Gathering trend" }
         guard let avg7 = snapshot.avg7, let avg30 = snapshot.avg30 else { return "Gathering trend" }
         let delta = avg7 - avg30
         if delta > 0.6 { return "Rising" }
@@ -1027,6 +1028,9 @@ struct InsightsView: View {
     }
 
     private func outlookSummary(snapshot: InsightSnapshot, score: Double) -> String {
+        if snapshot.evidenceLevel == .insufficient {
+            return L10n.tr("outlook.summary.learning")
+        }
         // Thresholds intentionally aligned with outlookBand so a single score
         // can't be labeled "Rough patch" by the badge while the supporting
         // summary line says it's only "bumpy".
@@ -1073,13 +1077,15 @@ struct InsightsView: View {
             .clipShape(Capsule())
     }
 
-    private func outlookBand(for score: Double) -> (label: String, color: Color) {
+    private func outlookBand(for score: Double, evidenceLevel: EvidenceLevel) -> (label: String, color: Color) {
+        if evidenceLevel == .insufficient { return ("Learning", .gray) }
         if score >= 75 { return ("Rough patch", .red) }
         if score >= 45 { return ("A bit bumpy", .orange) }
         return ("Smooth sailing", .green)
     }
 
-    private func stabilityLabel(score: Double) -> String {
+    private func stabilityLabel(score: Double, evidenceLevel: EvidenceLevel) -> String {
+        if evidenceLevel == .insufficient { return "Still getting to know your patterns" }
         if score >= 75 { return "Pretty turbulent right now" }
         if score >= 45 { return "Some choppiness" }
         if score >= 20 { return "Mostly calm" }

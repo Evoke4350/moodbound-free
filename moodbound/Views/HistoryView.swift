@@ -434,7 +434,13 @@ struct HistoryView: View {
             .frame(height: horizontalSizeClass == .regular ? 270 : 250)
 
             if let selectedEntry = selectedSleepEntry {
-                Text("\(String(format: "%.1f", selectedEntry.sleepHours))h sleep on \(selectedEntry.timestamp.formatted(date: .abbreviated, time: .omitted))")
+                // sleepHours == 0 is the "unknown" sentinel; the chart hides
+                // those bars, so the popover should say "unlogged" instead of
+                // printing a phantom 0.0h value.
+                let label: String = selectedEntry.sleepHours > 0
+                    ? "\(String(format: "%.1f", selectedEntry.sleepHours))h sleep on \(selectedEntry.timestamp.formatted(date: .abbreviated, time: .omitted))"
+                    : "Sleep not logged on \(selectedEntry.timestamp.formatted(date: .abbreviated, time: .omitted))"
+                Text(label)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .transition(.opacity)

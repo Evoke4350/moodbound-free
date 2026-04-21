@@ -45,7 +45,12 @@ enum RiskForecastService {
 
         let elevatedPosterior = average(latent.posteriors.suffix(14).map { $0.distribution.elevated })
         let depressivePosterior = average(latent.posteriors.suffix(14).map { $0.distribution.depressive })
-        let lowSleepRate = fraction(recent.map { $0.sleepHours < 6.0 })
+        // sleepHours == 0 is the app's "unknown" sentinel; drop those days
+        // from the rate so skipped entries don't inflate "low sleep" signal.
+        let lowSleepRate = fraction(recent.compactMap { v -> Bool? in
+            guard v.sleepHours > 0 else { return nil }
+            return v.sleepHours < 6.0
+        })
         let highVolatilityRate = fraction(recent.map { ($0.volatility7d ?? 0) >= 1.1 })
         let changeRate = recentChangeRate(changeCount: changePoints.count, recentCount: recent.count)
 

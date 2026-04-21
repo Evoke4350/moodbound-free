@@ -761,8 +761,9 @@ struct NewEntryView: View {
             case .skipped:
                 Button {
                     weatherExplicitlyRemoved = false
-                    weatherStatus = .denied
                     manualEntryMode = .none
+                    weatherStatus = .idle
+                    Task { await fetchWeatherIfNeeded() }
                 } label: {
                     Label("Add weather", systemImage: "plus.circle")
                         .font(.subheadline)

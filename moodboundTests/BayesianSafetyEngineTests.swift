@@ -79,6 +79,37 @@ final class BayesianSafetyEngineTests: XCTestCase {
             "Posterior should rise meaningfully above the prior, not collapse back into it")
     }
 
+    // Regression: sleepHours == 0 is the app's "unknown" sentinel (HealthKit
+    // miss or user skipped). Previously lowSleepRate was computed as
+    // `$0.sleepHours < 6.0`, which treated a run of unlogged days as 14 days
+    // of severe sleep deficit and inflated posteriorRisk. Two parallel
+    // windows — one with 0h unknowns, one with a benign 7h — must now produce
+    // effectively the same posterior, because the unknown days carry no
+    // evidence in either direction.
+    func testUnknownSleepDaysDoNotInflatePosteriorRisk() {
+        let now = Date()
+        let cal = Calendar.current
+        let unknownSleep: [MoodEntry] = (0..<14).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 0, energy: 3, sleepHours: 0, irritability: 0, anxiety: 0, note: ""
+            )
+        }
+        let benignSleep: [MoodEntry] = (0..<14).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: ""
+            )
+        }
+        let unknownResult = evaluate(vectors: FeatureStoreService.buildVectors(entries: unknownSleep))
+        let benignResult = evaluate(vectors: FeatureStoreService.buildVectors(entries: benignSleep))
+
+        XCTAssertEqual(unknownResult.posteriorRisk, benignResult.posteriorRisk, accuracy: 0.02,
+            "sleepHours==0 (unknown) must not drive posteriorRisk up vs. a benign 7h day")
+        XCTAssertEqual(rank(unknownResult.severity), rank(benignResult.severity),
+            "unknown sleep must not escalate severity")
+    }
+
     func testConfidenceBounds() {
         let scenario = RealisticMoodDatasetFactory.makeScenario(days: 60).entries
         let vectors = FeatureStoreService.buildVectors(entries: Array(scenario[20..<40]))

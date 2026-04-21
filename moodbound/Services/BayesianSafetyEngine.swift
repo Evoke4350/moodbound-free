@@ -44,7 +44,14 @@ enum BayesianSafetyEngine {
 
         let recent = Array(sorted.suffix(14))
         let evidenceLevel = EvidenceLevel.from(observationCount: recent.count)
-        let lowSleepRate = fraction(recent.map { $0.sleepHours < 6.0 })
+        // sleepHours == 0 is the app's "unknown" sentinel (HealthKit miss /
+        // user skipped). Treat those days as uninformative rather than
+        // counting them as "<6h" — otherwise a run of skipped sleep entries
+        // inflates lowSleepRate and drives the LR upward with no real signal.
+        let lowSleepRate = fraction(recent.compactMap { v -> Bool? in
+            guard v.sleepHours > 0 else { return nil }
+            return v.sleepHours < 6.0
+        })
         let highVolatilityRate = fraction(recent.map { ($0.volatility7d ?? 0) >= 1.1 })
 
         // HealthKit-derived signals
