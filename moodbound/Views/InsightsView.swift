@@ -736,7 +736,7 @@ struct InsightsView: View {
         case "sleep-regularity":
             return "Consistent sleep is one of the strongest stabilizers for mood."
         case "activation-slope":
-            return "Whether your energy and activity have been rising, falling, or flat recently."
+            return "Whether your energy has been rising, falling, or flat recently."
         case "recovery-half-life":
             return "How quickly you tend to bounce back after a rough patch."
         default:
@@ -1100,7 +1100,7 @@ struct InsightsView: View {
             if sleepIrregularity >= 4 {
                 return (
                     "Mixed",
-                    "Your mood seems okay on average, but your sleep and activity are all over the place.",
+                    "Your mood seems okay on average, but your sleep hasn't been very consistent.",
                     .purple
                 )
             }

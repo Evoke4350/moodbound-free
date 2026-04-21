@@ -69,7 +69,11 @@ enum AdaptiveCheckinService {
     }
 
     private static func sleepStdDev(entries: [MoodEntry]) -> Double {
-        let values = entries.suffix(14).map(\.sleepHours)
+        // sleepHours == 0 is the "unknown" sentinel. Including zeros mixes
+        // real 7-8h nights with phantom zeros and produces a huge stddev,
+        // which would flag sleep timing variability as the top uncertainty
+        // driver purely because of unlogged days.
+        let values = entries.suffix(14).map(\.sleepHours).filter { $0 > 0 }
         guard values.count > 1 else { return 0 }
         let mean = values.reduce(0, +) / Double(values.count)
         let variance = values.reduce(0) { sum, value in

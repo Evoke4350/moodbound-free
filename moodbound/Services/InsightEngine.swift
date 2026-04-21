@@ -62,7 +62,11 @@ enum InsightEngine {
         let viewModel = MoodViewModel()
         let recent14 = viewModel.entriesWithinDays(entries: entries, days: 14, now: now)
 
-        let lowSleepCount = recent14.filter { $0.sleepHours < 6 }.count
+        // sleepHours == 0 is the app's "unknown" sentinel (HealthKit miss or user
+        // skipped). Exclude unknowns so a run of unlogged days doesn't inflate the
+        // low-sleep count and mislead every downstream surface (Home nudge,
+        // Insights card, pattern story, conformal confidence).
+        let lowSleepCount = recent14.filter { $0.sleepHours > 0 && $0.sleepHours < 6 }.count
         let highSleepCount = recent14.filter { $0.sleepHours > 10 }.count
         let features = FeatureStoreService.buildVectors(entries: entries)
         let latent = LatentStateService.inferStates(vectors: features)

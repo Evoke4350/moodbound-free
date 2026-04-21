@@ -107,6 +107,28 @@ final class InsightEngineTests: XCTestCase {
         XCTAssertEqual(snapshot.highSleepCount14d, 3)
     }
 
+    // Regression: sleepHours == 0 is the app's "unknown" sentinel. Previously
+    // the low-sleep count used `$0.sleepHours < 6`, so a run of HealthKit
+    // misses (or days the user skipped) was counted as 14 days of severe
+    // sleep deprivation. That drove the Home nudge, the Insights "Under-
+    // sleeping" card, the pattern-story irregularity copy, and the conformal
+    // confidence derating — all from phantom data. The fix excludes zeros.
+    func testSnapshotSleepCountsExcludeUnknowns() {
+        let now = Date()
+        let cal = Calendar.current
+        let entries: [MoodEntry] = (0..<14).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 0, energy: 3, sleepHours: 0,
+                irritability: 0, anxiety: 0, note: ""
+            )
+        }
+        let snapshot = InsightEngine.snapshot(entries: entries, now: now)
+        XCTAssertEqual(snapshot.lowSleepCount14d, 0,
+            "unknown sleep (0h) must not count as low sleep")
+        XCTAssertEqual(snapshot.highSleepCount14d, 0)
+    }
+
     // Regression: counts.max(by:) iterated dictionary order, so two triggers
     // tied on count returned a non-deterministic name (Anvil sometimes,
     // Stress others). The fix sorts by (-count, name) so ties resolve
