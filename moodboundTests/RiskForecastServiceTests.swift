@@ -23,17 +23,21 @@ final class RiskForecastServiceTests: XCTestCase {
     // a single change point saturated to 1.0 across N=1..5, then dropped
     // discontinuously at N=6 (to 0.5). The fix uses Double division, which
     // keeps the rate strictly decreasing as N grows past the change count.
+    // We pin the post-fix plateau values so a re-introduction of integer
+    // division (e.g., `Double(recentCount/3 + 1)`) that still happens to be
+    // monotone would still fail this test.
     func testRecentChangeRateScalesSmoothlyWithSmallN() {
-        // With 1 change point, the rate must be strictly monotone-decreasing
-        // from N=4 upward — the buggy integer-division formula returned 1.0
-        // for both N=4 and N=5.
         let r4 = RiskForecastService.recentChangeRate(changeCount: 1, recentCount: 4)
         let r5 = RiskForecastService.recentChangeRate(changeCount: 1, recentCount: 5)
         let r6 = RiskForecastService.recentChangeRate(changeCount: 1, recentCount: 6)
         let r7 = RiskForecastService.recentChangeRate(changeCount: 1, recentCount: 7)
-        XCTAssertGreaterThan(r4, r5)
-        XCTAssertGreaterThan(r5, r6)
-        XCTAssertGreaterThan(r6, r7)
+
+        // Direct equality pins the formula. Buggy code returned 1.0 for r4
+        // and r5 both, then 0.5 for r6 — neither monotone nor continuous.
+        XCTAssertEqual(r4, 0.75, accuracy: 0.0001)
+        XCTAssertEqual(r5, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(r6, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(r7, 1.0 / (7.0 / 3.0), accuracy: 0.0001)
 
         // Rate is bounded in [0, 1] and saturates only when changes ≥ N/3.
         XCTAssertEqual(RiskForecastService.recentChangeRate(changeCount: 0, recentCount: 14), 0)
