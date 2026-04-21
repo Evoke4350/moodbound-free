@@ -49,6 +49,29 @@ final class BayesianSafetyEngineTests: XCTestCase {
         XCTAssertGreaterThan(fullResult.posteriorRisk, sparseResult.posteriorRisk)
     }
 
+    // Regression for the double-shrinkage interaction: at N=6 with severe
+    // distress, the previous chain (RiskForecastService shrunk -> fed into
+    // BayesianSafetyEngine LR -> linearly shrunk again) compounded so hard
+    // that posteriorRisk landed near the prior (0.22). With (a) the LR now
+    // reading forecast.rawValue and (b) the sqrt curve, the same window
+    // should bind to at least .elevated.
+    func testIntermediateSampleStrongDistressEscalates() {
+        let now = Date()
+        let cal = Calendar.current
+        let entries: [MoodEntry] = (0..<6).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 3, energy: 5, sleepHours: 4, irritability: 3, anxiety: 3, note: ""
+            )
+        }
+        let vectors = FeatureStoreService.buildVectors(entries: entries)
+        let result = evaluate(vectors: vectors)
+        XCTAssertGreaterThanOrEqual(rank(result.severity), rank(.elevated),
+            "N=6 with severe distress should escalate beyond .none after the double-shrinkage fix")
+        XCTAssertGreaterThan(result.posteriorRisk, 0.22,
+            "Posterior should rise meaningfully above the prior, not collapse back into it")
+    }
+
     func testConfidenceBounds() {
         let scenario = RealisticMoodDatasetFactory.makeScenario(days: 60).entries
         let vectors = FeatureStoreService.buildVectors(entries: Array(scenario[20..<40]))

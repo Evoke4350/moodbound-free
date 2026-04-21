@@ -5,9 +5,23 @@ struct ProbabilisticScore: Equatable {
     let ciLow: Double
     let ciHigh: Double
     let calibrationError: Double
+    // Pre-shrinkage forecast value. Downstream consumers (BayesianSafetyEngine)
+    // need the unattenuated signal to drive their own posterior — feeding the
+    // already-shrunk `value` would compound shrinkage and silently suppress
+    // genuine distress signals at intermediate sample sizes (N=4..10). UI
+    // surfaces should use `value` (shrunk); model math should use `rawValue`.
+    let rawValue: Double
 
     var ciWidth: Double {
         ciHigh - ciLow
+    }
+
+    init(value: Double, ciLow: Double, ciHigh: Double, calibrationError: Double, rawValue: Double? = nil) {
+        self.value = value
+        self.ciLow = ciLow
+        self.ciHigh = ciHigh
+        self.calibrationError = calibrationError
+        self.rawValue = rawValue ?? value
     }
 }
 
@@ -39,15 +53,16 @@ enum RiskForecastService {
             1.65
 
         // Pull the raw sigmoid output toward the neutral prior (0.5) when
-        // the recent window is sparse. The shrinkage weight grows linearly
-        // from 0 → 1 as recent.count approaches 14; below that, a single
-        // high-anxiety day can no longer drag the headline forecast above
-        // 0.5 by itself. The CI computed below already widens with sqrt(N),
-        // so we don't need to widen it further — only the point estimate
-        // was misbehaving as a confidence overstatement.
+        // the recent window is sparse. We use sqrt(N/14) — the same scaling
+        // family as the CI uncertainty term below — so confidence builds
+        // faster than linear in the 4–10 regime that the user actually sees
+        // most often, while still pinning the headline near 0.5 at N=1..2.
+        // The raw value is preserved on the result so downstream consumers
+        // (BayesianSafetyEngine) can compute their own posterior without
+        // double-shrinking through this attenuated value.
         let rawValue = sigmoid(linearScore)
         let sampleSize = Double(recent.count)
-        let shrinkWeight = min(1.0, sampleSize / 14.0)
+        let shrinkWeight = min(1.0, sqrt(sampleSize / 14.0))
         let value = (shrinkWeight * rawValue) + ((1.0 - shrinkWeight) * 0.5)
         let uncertaintyScale = max(0.08, 0.35 / sqrt(max(1.0, sampleSize)))
         let low = clamp(value - uncertaintyScale)
@@ -60,7 +75,8 @@ enum RiskForecastService {
             value: value,
             ciLow: min(low, high),
             ciHigh: max(low, high),
-            calibrationError: calibrationError
+            calibrationError: calibrationError,
+            rawValue: rawValue
         )
     }
 

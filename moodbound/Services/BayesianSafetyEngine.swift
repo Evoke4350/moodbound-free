@@ -70,7 +70,13 @@ enum BayesianSafetyEngine {
         let prior = 0.22
         let priorOdds = prior / (1.0 - prior)
         var logLR = 0.0
-        logLR += 2.0 * forecast.value
+        // Use the unshrunk forecast here. RiskForecastService.value is already
+        // pulled toward 0.5 by sqrt(N/14); feeding it into the LR would
+        // compound that shrinkage with the posterior shrinkage below, which
+        // pushed N=4..10 results unrealistically close to the prior even when
+        // the underlying signal was strong. The forecast model exposes
+        // rawValue precisely so this layer can run its own attenuation.
+        logLR += 2.0 * forecast.rawValue
         logLR += 1.6 * elevatedPosterior
         logLR += 1.6 * depressivePosterior
         logLR += 1.2 * lowSleepRate
@@ -90,11 +96,14 @@ enum BayesianSafetyEngine {
         // Shrinkage: pull the posterior toward the prior (0.22) when the
         // window is sparse. With N=2, the LR can spike high off a single
         // distressing day; without this, severity could escalate to .high
-        // or .critical from two data points. The weight grows linearly to
-        // 1.0 by N=14, so an established record sees no attenuation.
-        // Severity bands and threshold values are unchanged — only the
-        // posterior they read from is now sample-size aware.
-        let shrinkWeight = min(1.0, Double(recent.count) / 14.0)
+        // or .critical from two data points. We use sqrt(N/14) — the same
+        // family used by RiskForecastService and by the CI uncertainty
+        // term — so confidence builds faster than linear in the 4..10
+        // regime that users actually see most often, while still pinning
+        // the posterior near the prior at N=1..2. Severity bands and
+        // threshold values are unchanged — only the posterior they read
+        // from is now sample-size aware.
+        let shrinkWeight = min(1.0, sqrt(Double(recent.count) / 14.0))
         let posteriorRisk = (shrinkWeight * rawPosteriorRisk) + ((1.0 - shrinkWeight) * prior)
 
         let severity: SafetySeverity

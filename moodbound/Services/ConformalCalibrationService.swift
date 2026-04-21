@@ -16,7 +16,8 @@ enum ConformalCalibrationService {
             value: raw.value,
             ciLow: min(low, high),
             ciHigh: max(low, high),
-            calibrationError: min(0.5, max(0, raw.calibrationError * 0.7))
+            calibrationError: min(0.5, max(0, raw.calibrationError * 0.7)),
+            rawValue: raw.rawValue
         )
     }
 
