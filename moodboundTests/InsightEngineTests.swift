@@ -107,6 +107,67 @@ final class InsightEngineTests: XCTestCase {
         XCTAssertEqual(snapshot.highSleepCount14d, 3)
     }
 
+    // Regression: counts.max(by:) iterated dictionary order, so two triggers
+    // tied on count returned a non-deterministic name (Anvil sometimes,
+    // Stress others). The fix sorts by (-count, name) so ties resolve
+    // alphabetically. Repeating the snapshot must always pick the same name.
+    func testSnapshotTopTriggerTieBreakIsDeterministicAndAlphabetical() {
+        let now = Date()
+        let cal = Calendar.current
+        let alpha = TriggerFactor(name: "Alpha", category: "social")
+        let zulu = TriggerFactor(name: "Zulu", category: "social")
+
+        var entries: [MoodEntry] = []
+        for i in 0..<6 {
+            let date = cal.date(byAdding: .day, value: -i, to: now)!
+            let entry = MoodEntry(timestamp: date, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+            // Equal count: 3 Alpha events and 3 Zulu events across 6 days.
+            let trigger = i % 2 == 0 ? alpha : zulu
+            entry.triggerEvents = [TriggerEvent(timestamp: date, intensity: 2, trigger: trigger, moodEntry: entry)]
+            entries.append(entry)
+        }
+
+        let topNames = (0..<5).map { _ in InsightEngine.snapshot(entries: entries, now: now).topTrigger14d }
+        XCTAssertEqual(Set(topNames).count, 1, "topTrigger14d should be stable across repeated calls")
+        XCTAssertEqual(topNames.first ?? nil, "Alpha", "ties should resolve to the alphabetically first name")
+    }
+
+    // Regression: with only 2 entries, the previous engine still emitted
+    // confident "shift" / "bumpier than usual" narrative bullets and the
+    // outlook badge could read "Rough patch", since none of those
+    // signals had a sample-size guard. The fix routes user-facing narrative
+    // through an EvidenceLevel gate; below 4 recent observations we surface
+    // a single "still learning your patterns" message instead.
+    func testSnapshotEvidenceLevelHedgesNarrativeWhenSparse() {
+        let now = Date()
+        let cal = Calendar.current
+        let entries: [MoodEntry] = (0..<2).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 3, energy: 5, sleepHours: 4, irritability: 3, anxiety: 3, note: ""
+            )
+        }
+        let snapshot = InsightEngine.snapshot(entries: entries, now: now)
+        XCTAssertEqual(snapshot.evidenceLevel, .insufficient)
+        XCTAssertEqual(snapshot.observationsLast14d, 2)
+        XCTAssertEqual(snapshot.safety.evidenceSignals.count, 1)
+        XCTAssertTrue(snapshot.safety.evidenceSignals.first?.lowercased().contains("learning") ?? false)
+    }
+
+    func testSnapshotEvidenceLevelEstablishedWithFullWindow() {
+        let now = Date()
+        let cal = Calendar.current
+        let entries: [MoodEntry] = (0..<14).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: ""
+            )
+        }
+        let snapshot = InsightEngine.snapshot(entries: entries, now: now)
+        XCTAssertEqual(snapshot.evidenceLevel, .established)
+        XCTAssertEqual(snapshot.observationsLast14d, 14)
+    }
+
     func testSnapshotRainyDeltaCountsOpenMeteoRainCodes() {
         let now = Date()
         let cal = Calendar.current

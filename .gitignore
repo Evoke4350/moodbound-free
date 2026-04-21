@@ -38,3 +38,6 @@ __pycache__/
 .env
 .env.*
 *.p8
+
+# Nested marketing site repo (separate origin: Evoke4350/moodbound.app)
+moodbound.app/

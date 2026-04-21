@@ -15,7 +15,9 @@ final class InsightNarrativeComposerTests: XCTestCase {
                 signals: ["7-day forecast risk is elevated."]
             ),
             recommendedActions: ["Review your safety plan"],
-            messages: ["Patterns were detected."]
+            messages: ["Patterns were detected."],
+            evidenceLevel: .established,
+            observationsLast14d: 12
         )
         let topAttribution = TriggerAttribution(
             triggerName: "Stress",

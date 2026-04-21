@@ -14,6 +14,8 @@
 "outlook.summary.bumpy" = "Algunos altibajos últimamente. Mantener tu rutina ayudará — atenta/o a cambios bruscos.";
 "outlook.summary.low_sleep_watch" = "En general estable, pero algunas noches de poco sueño podrían desbalancear las cosas. Cuida tu descanso.";
 "outlook.summary.steady" = "Estás en un buen ritmo ahora mismo. Sigue así.";
+/* Mostrado cuando hay menos de ~4 registros recientes — el modelo aún no puede decir mucho, así que somos explícitos en lugar de exagerar. */
+"outlook.summary.learning" = "Solo unos pocos registros por ahora. Con algunos más, estos insights serán más nítidos.";
 
 /* Tooltip de confianza de datos. */
 "insights.data_confidence.tooltip" = "Más registros = imagen más nítida. Sigue registrando y tus insights mejorarán.";

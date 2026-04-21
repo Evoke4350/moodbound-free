@@ -56,7 +56,7 @@ struct InsightsView: View {
             icon: "flame.fill",
             color: .orange,
             title: "Streak",
-            value: "\(snapshot.streakDays) days"
+            value: "\(snapshot.streakDays) day\(snapshot.streakDays == 1 ? "" : "s")"
         )
 
         if let avg7 = snapshot.avg7 {
@@ -79,7 +79,9 @@ struct InsightsView: View {
             )
         }
 
-        sleepInsight(snapshot: snapshot)
+        if snapshot.lowSleepCount14d > 0 || snapshot.highSleepCount14d > 0 {
+            sleepInsight(snapshot: snapshot)
+        }
 
         if let adherence = snapshot.medicationAdherenceRate14d {
             insightCard(
@@ -103,16 +105,30 @@ struct InsightsView: View {
 
         yourPatternsCard(snapshot: snapshot)
         monthOverMonthCard
-        weatherImpactCard(snapshot: snapshot)
-        warningCard(snapshot: snapshot)
+        if snapshot.weatherCoverageDays >= 7 {
+            weatherImpactCard(snapshot: snapshot)
+        }
+        if snapshot.safety.severity != .none {
+            warningCard(snapshot: snapshot)
+        }
         safetyPlanCard
         modelTransparencyCard(snapshot: snapshot)
         phenotypeCard(snapshot: snapshot)
-        directionalCard(snapshot: snapshot)
-        triggerAttributionCard(snapshot: snapshot)
-        medicationTrajectoryCard(snapshot: snapshot)
-        adaptivePromptCard(snapshot: snapshot)
-        narrativeCard(snapshot: snapshot)
+        if let probe = snapshot.directionalProbes.first, probe.confidence > 0 {
+            directionalCard(snapshot: snapshot, probe: probe)
+        }
+        if let topTrigger = snapshot.triggerAttributions.first {
+            triggerAttributionCard(snapshot: snapshot, top: topTrigger)
+        }
+        if let trajectory = snapshot.medicationTrajectories.first(where: \.isDataSufficient) {
+            medicationTrajectoryCard(snapshot: snapshot, trajectory: trajectory)
+        }
+        if !snapshot.adaptivePrompts.isEmpty {
+            adaptivePromptCard(snapshot: snapshot)
+        }
+        if !snapshot.narrativeCards.isEmpty {
+            narrativeCard(snapshot: snapshot)
+        }
     }
 
     private func insightCard(icon: String, color: Color, title: String, value: String, detail: String? = nil) -> some View {
@@ -143,17 +159,13 @@ struct InsightsView: View {
     }
 
     private func sleepInsight(snapshot: InsightSnapshot) -> some View {
-        return Group {
-            if snapshot.lowSleepCount14d > 0 || snapshot.highSleepCount14d > 0 {
-                insightCard(
-                    icon: "moon.fill",
-                    color: .indigo,
-                    title: "Sleep Pattern (14d)",
-                    value: snapshot.lowSleepCount14d > 0 ? "Under-sleeping" : "Over-sleeping",
-                    detail: sleepDetail(lowSleep: snapshot.lowSleepCount14d, highSleep: snapshot.highSleepCount14d)
-                )
-            }
-        }
+        insightCard(
+            icon: "moon.fill",
+            color: .indigo,
+            title: "Sleep Pattern (14d)",
+            value: snapshot.lowSleepCount14d > 0 ? "Under-sleeping" : "Over-sleeping",
+            detail: sleepDetail(lowSleep: snapshot.lowSleepCount14d, highSleep: snapshot.highSleepCount14d)
+        )
     }
 
     private func sleepDetail(lowSleep: Int, highSleep: Int) -> String {
@@ -168,128 +180,140 @@ struct InsightsView: View {
 
     private func warningCard(snapshot: InsightSnapshot) -> some View {
         let safety = snapshot.safety
-        return Group {
-            if safety.severity != .none {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(MoodboundDesign.accent)
-                        Text("Safety: \(safety.severity.rawValue)")
-                            .font(.headline)
-                    }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(MoodboundDesign.accent)
+                Text("Safety: \(safety.severity.rawValue)")
+                    .font(.headline)
+            }
 
-                    ForEach(safety.messages, id: \.self) { message in
-                        Text(message)
-                            .font(.subheadline)
-                    }
+            ForEach(safety.messages, id: \.self) { message in
+                Text(message)
+                    .font(.subheadline)
+            }
 
-                    if !safety.recommendedActions.isEmpty {
-                        Text("Recommended actions")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.top, 4)
-                        ForEach(safety.recommendedActions, id: \.self) { action in
-                            Text("• \(action)")
-                                .font(.subheadline)
-                        }
-                    }
-
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Concern Level")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(concernLabel(safety.posteriorRisk))
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(MoodboundDesign.accent)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Data Confidence")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(confidenceLabel(safety.confidence))
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(MoodboundDesign.tint)
-                        }
-                    }
-
-                    if let start = safety.evidenceWindowStart, let end = safety.evidenceWindowEnd {
-                        Text("Based on \(start.formatted(date: .abbreviated, time: .omitted)) – \(end.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if !safety.evidenceSignals.isEmpty {
-                        Text("Evidence")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(safety.evidenceSignals.prefix(3), id: \.self) { signal in
-                            Text("• \(signal)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if let crisisText = safety.crisisBannerText {
-                        Text(crisisText)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
+            if !safety.recommendedActions.isEmpty {
+                Text("Recommended actions")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.top, 4)
+                ForEach(safety.recommendedActions, id: \.self) { action in
+                    Text("• \(action)")
+                        .font(.subheadline)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+            }
+
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Concern Level")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(concernLabel(safety.posteriorRisk))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(MoodboundDesign.accent)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Data Confidence")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(confidenceLabel(safety.confidence))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(MoodboundDesign.tint)
+                }
+            }
+
+            if let start = safety.evidenceWindowStart, let end = safety.evidenceWindowEnd {
+                Text("Based on \(start.formatted(date: .abbreviated, time: .omitted)) – \(end.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !safety.evidenceSignals.isEmpty {
+                Text("Evidence")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(safety.evidenceSignals.prefix(3), id: \.self) { signal in
+                    Text("• \(signal)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let crisisText = safety.crisisBannerText {
+                Text(crisisText)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
+    @ViewBuilder
     private var monthOverMonthCard: some View {
         let calendar = Calendar.current
         let now = appNow
 
-        // Split entries into this-month (last 30d) and prior-month (31–60d ago).
-        let cutoff30 = calendar.date(byAdding: .day, value: -30, to: now) ?? now
-        let cutoff60 = calendar.date(byAdding: .day, value: -60, to: now) ?? now
-        let thisMonth = entries.filter { $0.timestamp >= cutoff30 && $0.timestamp <= now }
-        let lastMonth = entries.filter { $0.timestamp >= cutoff60 && $0.timestamp < cutoff30 }
+        // Split entries into two equal-length 30-day windows anchored on
+        // calendar day boundaries. The previous implementation used wall-clock
+        // subtraction (`now - 30d`, `now - 60d`) and an inclusive upper bound
+        // for this-month, which made this-month a 31-day window while
+        // last-month was 30 — biasing the comparison.
+        let startToday = calendar.startOfDay(for: now)
+        let upperThis = calendar.date(byAdding: .day, value: 1, to: startToday) ?? startToday
+        let lowerThis = calendar.date(byAdding: .day, value: -29, to: startToday) ?? startToday
+        let lowerLast = calendar.date(byAdding: .day, value: -59, to: startToday) ?? startToday
+        let thisMonth = entries.filter { $0.timestamp >= lowerThis && $0.timestamp < upperThis }
+        let lastMonth = entries.filter { $0.timestamp >= lowerLast && $0.timestamp < lowerThis }
 
-        return Group {
-            if thisMonth.count >= 5 && lastMonth.count >= 5 {
-                let thisAvg = Double(thisMonth.reduce(0) { $0 + $1.moodLevel }) / Double(thisMonth.count)
-                let lastAvg = Double(lastMonth.reduce(0) { $0 + $1.moodLevel }) / Double(lastMonth.count)
-                let delta = thisAvg - lastAvg
+        if thisMonth.count >= 5 && lastMonth.count >= 5 {
+            let thisAvg = Double(thisMonth.reduce(0) { $0 + $1.moodLevel }) / Double(thisMonth.count)
+            let lastAvg = Double(lastMonth.reduce(0) { $0 + $1.moodLevel }) / Double(lastMonth.count)
+            let delta = thisAvg - lastAvg
 
-                let thisSleep = thisMonth.reduce(0.0) { $0 + $1.sleepHours } / Double(thisMonth.count)
-                let lastSleep = lastMonth.reduce(0.0) { $0 + $1.sleepHours } / Double(lastMonth.count)
-                let sleepDelta = thisSleep - lastSleep
+            // sleepHours == 0 is the "unknown" sentinel; exclude those entries
+            // so users who skipped logging sleep don't drag their monthly
+            // average to absurd values.
+            let thisSleepKnown = thisMonth.map(\.sleepHours).filter { $0 > 0 }
+            let lastSleepKnown = lastMonth.map(\.sleepHours).filter { $0 > 0 }
+            let thisSleep = thisSleepKnown.isEmpty
+                ? nil
+                : thisSleepKnown.reduce(0.0, +) / Double(thisSleepKnown.count)
+            let lastSleep = lastSleepKnown.isEmpty
+                ? nil
+                : lastSleepKnown.reduce(0.0, +) / Double(lastSleepKnown.count)
+            let sleepDelta: Double? = (thisSleep != nil && lastSleep != nil) ? (thisSleep! - lastSleep!) : nil
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "calendar.badge.clock")
-                            .foregroundStyle(.blue)
-                        Text("This Month vs Last")
-                            .font(.headline)
-                    }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar.badge.clock")
+                        .foregroundStyle(.blue)
+                    Text("This Month vs Last")
+                        .font(.headline)
+                }
 
-                    HStack(spacing: 20) {
-                        comparisonStat(
-                            label: "Avg Mood",
-                            delta: delta,
-                            format: { String(format: "%+.1f", $0) }
-                        )
+                HStack(spacing: 20) {
+                    comparisonStat(
+                        label: "Avg Mood",
+                        delta: delta,
+                        format: { String(format: "%+.1f", $0) }
+                    )
+                    if let sleepDelta {
                         comparisonStat(
                             label: "Avg Sleep",
                             delta: sleepDelta,
                             format: { String(format: "%+.1fh", $0) }
                         )
-                        comparisonStat(
-                            label: "Entries",
-                            delta: Double(thisMonth.count - lastMonth.count),
-                            format: { String(format: "%+.0f", $0) }
-                        )
                     }
+                    comparisonStat(
+                        label: "Entries",
+                        delta: Double(thisMonth.count - lastMonth.count),
+                        format: { String(format: "%+.0f", $0) }
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .moodCard()
         }
     }
 
@@ -314,30 +338,29 @@ struct InsightsView: View {
         return delta > 0 ? .green : .orange
     }
 
+    @ViewBuilder
     private func yourPatternsCard(snapshot: InsightSnapshot) -> some View {
         let stories = patternStories(snapshot: snapshot)
-        return Group {
-            if !stories.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkle.magnifyingglass")
-                            .foregroundStyle(MoodboundDesign.tint)
-                        Text("Your Patterns")
-                            .font(.headline)
-                    }
-
-                    ForEach(stories, id: \.self) { story in
-                        Text(story)
-                            .font(.subheadline)
-                    }
-
-                    Text("Based on your logged data — patterns, not diagnoses.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        if !stories.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .foregroundStyle(MoodboundDesign.tint)
+                    Text("Your Patterns")
+                        .font(.headline)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+
+                ForEach(stories, id: \.self) { story in
+                    Text(story)
+                        .font(.subheadline)
+                }
+
+                Text("Based on your logged data — patterns, not diagnoses.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .moodCard()
         }
     }
 
@@ -410,62 +433,57 @@ struct InsightsView: View {
         .accessibilityIdentifier("open-safety-plan-button")
         .moodCard()
     }
-    }
 
     private func weatherImpactCard(snapshot: InsightSnapshot) -> some View {
-        Group {
-            if snapshot.weatherCoverageDays >= 7 {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Weather & Mood")
-                        .font(.headline)
-                    Text("\(snapshot.weatherCoverageDays)-day weather timeline\(snapshot.weatherCity.map { " for \($0)" } ?? "")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Weather & Mood")
+                .font(.headline)
+            Text("\(snapshot.weatherCoverageDays)-day weather timeline\(snapshot.weatherCity.map { " for \($0)" } ?? "")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                    if let rainyDelta = snapshot.rainyMoodDelta {
-                        HStack(spacing: 8) {
-                            Text("🌧")
-                                .font(.title2)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(weatherEffectLabel("Rain", delta: rainyDelta))
-                                    .font(.subheadline.weight(.bold))
-                                Text(rainyDelta < -0.3
-                                     ? "Your mood tends to dip on rainy days."
-                                     : rainyDelta > 0.3
-                                     ? "Rain actually seems to help your mood."
-                                     : "Rainy days don't seem to affect you much.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        weatherGatheringHint("rain vs. clear sky")
-                    }
-
-                    if let hotDelta = snapshot.hotMoodDelta {
-                        HStack(spacing: 8) {
-                            Text("🌡️")
-                                .font(.title2)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(weatherEffectLabel("Heat", delta: hotDelta))
-                                    .font(.subheadline.weight(.bold))
-                                Text(hotDelta > 0.3
-                                     ? "Hot days seem to amp you up a bit."
-                                     : hotDelta < -0.3
-                                     ? "Heat tends to bring your mood down."
-                                     : "Heat doesn't seem to affect your mood much.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    } else {
-                        weatherGatheringHint("hot vs. mild days")
+            if let rainyDelta = snapshot.rainyMoodDelta {
+                HStack(spacing: 8) {
+                    Text("🌧")
+                        .font(.title2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(weatherEffectLabel("Rain", delta: rainyDelta))
+                            .font(.subheadline.weight(.bold))
+                        Text(rainyDelta < -0.3
+                             ? "Your mood tends to dip on rainy days."
+                             : rainyDelta > 0.3
+                             ? "Rain actually seems to help your mood."
+                             : "Rainy days don't seem to affect you much.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+            } else {
+                weatherGatheringHint("rain vs. clear sky")
+            }
+
+            if let hotDelta = snapshot.hotMoodDelta {
+                HStack(spacing: 8) {
+                    Text("🌡️")
+                        .font(.title2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(weatherEffectLabel("Heat", delta: hotDelta))
+                            .font(.subheadline.weight(.bold))
+                        Text(hotDelta > 0.3
+                             ? "Hot days seem to amp you up a bit."
+                             : hotDelta < -0.3
+                             ? "Heat tends to bring your mood down."
+                             : "Heat doesn't seem to affect your mood much.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                weatherGatheringHint("hot vs. mild days")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
     private func weatherGatheringHint(_ comparison: String) -> some View {
@@ -480,8 +498,7 @@ struct InsightsView: View {
 
     private func outlookCard(snapshot: InsightSnapshot) -> some View {
         let score = outlookScore(snapshot: snapshot)
-        let band = outlookBand(for: score)
-        let trend = scoreTrend(snapshot: snapshot)
+        let band = outlookBand(for: score, evidenceLevel: snapshot.evidenceLevel)
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -497,7 +514,7 @@ struct InsightsView: View {
                     .clipShape(Capsule())
             }
 
-            Text(stabilityLabel(score: score))
+            Text(stabilityLabel(score: score, evidenceLevel: snapshot.evidenceLevel))
                 .font(.title3.weight(.bold))
 
             outcomeMeter(score: score, color: band.color)
@@ -704,9 +721,10 @@ struct InsightsView: View {
             return "Holding steady"
         case "recovery-half-life":
             let days = card.metricValue
-            if days <= 2 { return "Fast — about \(Int(days.rounded())) day\(days <= 1.5 ? "" : "s")" }
+            let rounded = Int(days.rounded())
+            if days <= 2 { return "Fast — about \(rounded) day\(rounded == 1 ? "" : "s")" }
             if days <= 5 { return "A few days" }
-            return "Takes a while — \(Int(days.rounded())) days"
+            return "Takes a while — \(rounded) days"
         default:
             return card.interpretationBand
         }
@@ -745,42 +763,38 @@ struct InsightsView: View {
         }
     }
 
-    private func directionalCard(snapshot: InsightSnapshot) -> some View {
-        Group {
-            if let probe = snapshot.directionalProbes.first, probe.confidence > 0 {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Connection Spotted")
-                        .font(.headline)
-                    Text("\(probe.source) → \(probe.target)")
-                        .font(.title3.weight(.bold))
+    private func directionalCard(snapshot: InsightSnapshot, probe: DirectionalSignalProbe) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Connection Spotted")
+                .font(.headline)
+            Text("\(probe.source) → \(probe.target)")
+                .font(.title3.weight(.bold))
 
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Strength")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(connectionStrengthLabel(probe.strength))
-                                .font(.title2.weight(.bold))
-                                .foregroundStyle(connectionStrengthColor(probe.strength))
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Confidence")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("\(Int((probe.confidence * 100).rounded()))%")
-                                .font(.title2.weight(.bold))
-                                .foregroundStyle(MoodboundDesign.tint)
-                        }
-                    }
-
-                    Text("This is a pattern in your data, not a diagnosis or proof of cause and effect. Use it as a conversation starter with your care team.")
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Strength")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text(connectionStrengthLabel(probe.strength))
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(connectionStrengthColor(probe.strength))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Confidence")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(Int((probe.confidence * 100).rounded()))%")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(MoodboundDesign.tint)
+                }
             }
+
+            Text("This is a pattern in your data, not a diagnosis or proof of cause and effect. Use it as a conversation starter with your care team.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
     private func connectionStrengthLabel(_ strength: Double) -> String {
@@ -798,72 +812,64 @@ struct InsightsView: View {
         return .green
     }
 
-    private func triggerAttributionCard(snapshot: InsightSnapshot) -> some View {
-        Group {
-            if let top = snapshot.triggerAttributions.first {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Biggest Trigger")
-                        .font(.headline)
-                    Text(top.triggerName)
-                        .font(.title2.weight(.bold))
-                    HStack(spacing: 4) {
-                        Text("\(Int((top.confidence * 100).rounded()))%")
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(MoodboundDesign.tint)
-                        Text("match")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("Based on \(top.evidenceWindowStart.formatted(date: .abbreviated, time: .omitted)) – \(top.evidenceWindowEnd.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text("This shows which factor appeared most often alongside mood changes — it's a pattern, not a cause.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+    private func triggerAttributionCard(snapshot: InsightSnapshot, top: TriggerAttribution) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Biggest Trigger")
+                .font(.headline)
+            Text(top.triggerName)
+                .font(.title2.weight(.bold))
+            HStack(spacing: 4) {
+                Text("\(Int((top.confidence * 100).rounded()))%")
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(MoodboundDesign.tint)
+                Text("match")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            Text("Based on \(top.evidenceWindowStart.formatted(date: .abbreviated, time: .omitted)) – \(top.evidenceWindowEnd.formatted(date: .abbreviated, time: .omitted))")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text("This shows which factor appeared most often alongside mood changes — it's a pattern, not a cause.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
-    private func medicationTrajectoryCard(snapshot: InsightSnapshot) -> some View {
-        Group {
-            if let trajectory = snapshot.medicationTrajectories.first(where: \.isDataSufficient) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Medication Effect")
-                        .font(.headline)
-                    Text(trajectory.medicationName)
-                        .font(.title3.weight(.bold))
+    private func medicationTrajectoryCard(snapshot: InsightSnapshot, trajectory: MedicationTrajectory) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Medication Effect")
+                .font(.headline)
+            Text(trajectory.medicationName)
+                .font(.title3.weight(.bold))
 
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Past few days")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(medEffectLabel(trajectory.shortWindowDelta))
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(medEffectColor(trajectory.shortWindowDelta))
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("Past few weeks")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(medEffectLabel(trajectory.mediumWindowDelta))
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(medEffectColor(trajectory.mediumWindowDelta))
-                        }
-                    }
-
-                    Text("Compares your stability on days you took this medication vs. days you missed it.")
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Past few days")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text(medEffectLabel(trajectory.shortWindowDelta))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(medEffectColor(trajectory.shortWindowDelta))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Past few weeks")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(medEffectLabel(trajectory.mediumWindowDelta))
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(medEffectColor(trajectory.mediumWindowDelta))
+                }
             }
+
+            Text("Compares your stability on days you took this medication vs. days you missed it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
     private func medEffectLabel(_ delta: Double) -> String {
@@ -881,39 +887,35 @@ struct InsightsView: View {
     }
 
     private func adaptivePromptCard(snapshot: InsightSnapshot) -> some View {
-        Group {
-            if !snapshot.adaptivePrompts.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Image(systemName: "lightbulb.fill")
-                            .foregroundStyle(.yellow)
-                        Text("Try This Next Time")
-                            .font(.headline)
-                    }
-                    Text("These questions can help fill in gaps in your data:")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: "lightbulb.fill")
+                    .foregroundStyle(.yellow)
+                Text("Try This Next Time")
+                    .font(.headline)
+            }
+            Text("These questions can help fill in gaps in your data:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(snapshot.adaptivePrompts.prefix(2)) { prompt in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(prompt.title)
+                        .font(.subheadline.weight(.bold))
+                    Text(prompt.prompt)
+                        .font(.subheadline)
+                    Text(prompt.rationale)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    ForEach(snapshot.adaptivePrompts.prefix(2)) { prompt in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(prompt.title)
-                                .font(.subheadline.weight(.bold))
-                            Text(prompt.prompt)
-                                .font(.subheadline)
-                            Text(prompt.rationale)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(MoodboundDesign.tint.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
                 }
+                .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
+                .background(MoodboundDesign.tint.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
     /// B4: Render all narrative cards the composer produced (safety,
@@ -923,43 +925,39 @@ struct InsightsView: View {
     /// the safety card. Body text is already sanitized by
     /// SafetyCopyPolicy inside the composer.
     private func narrativeCard(snapshot: InsightSnapshot) -> some View {
-        Group {
-            if !snapshot.narrativeCards.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("What we're seeing")
-                        .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("What we're seeing")
+                .font(.headline)
 
-                    ForEach(snapshot.narrativeCards) { narrative in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 6) {
-                                Image(systemName: narrativeIcon(for: narrative.id))
-                                    .foregroundStyle(narrativeColor(for: narrative.id))
-                                Text(narrative.title)
-                                    .font(.subheadline.weight(.semibold))
-                            }
-                            Text(narrative.body)
-                                .font(.subheadline)
-                            HStack(spacing: 12) {
-                                Text(confidenceLabel(narrative.confidence))
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(MoodboundDesign.tint)
-                                Text(narrative.evidenceWindow)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if narrative.id != snapshot.narrativeCards.last?.id {
-                            Divider()
-                        }
+            ForEach(snapshot.narrativeCards) { narrative in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: narrativeIcon(for: narrative.id))
+                            .foregroundStyle(narrativeColor(for: narrative.id))
+                        Text(narrative.title)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    Text(narrative.body)
+                        .font(.subheadline)
+                    HStack(spacing: 12) {
+                        Text(confidenceLabel(narrative.confidence))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(MoodboundDesign.tint)
+                        Text(narrative.evidenceWindow)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .moodCard()
-                .accessibilityIdentifier("insights-narrative-card")
+
+                if narrative.id != snapshot.narrativeCards.last?.id {
+                    Divider()
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
+        .accessibilityIdentifier("insights-narrative-card")
     }
 
     private func narrativeIcon(for id: String) -> String {
@@ -1021,6 +1019,7 @@ struct InsightsView: View {
     }
 
     private func scoreTrend(snapshot: InsightSnapshot) -> String {
+        if snapshot.evidenceLevel == .insufficient { return "Gathering trend" }
         guard let avg7 = snapshot.avg7, let avg30 = snapshot.avg30 else { return "Gathering trend" }
         let delta = avg7 - avg30
         if delta > 0.6 { return "Rising" }
@@ -1029,10 +1028,16 @@ struct InsightsView: View {
     }
 
     private func outlookSummary(snapshot: InsightSnapshot, score: Double) -> String {
-        if score >= 70 {
+        if snapshot.evidenceLevel == .insufficient {
+            return L10n.tr("outlook.summary.learning")
+        }
+        // Thresholds intentionally aligned with outlookBand so a single score
+        // can't be labeled "Rough patch" by the badge while the supporting
+        // summary line says it's only "bumpy".
+        if score >= 75 {
             return L10n.tr("outlook.summary.rough")
         }
-        if score >= 40 {
+        if score >= 45 {
             return L10n.tr("outlook.summary.bumpy")
         }
         if snapshot.lowSleepCount14d > 0 {
@@ -1072,13 +1077,15 @@ struct InsightsView: View {
             .clipShape(Capsule())
     }
 
-    private func outlookBand(for score: Double) -> (label: String, color: Color) {
+    private func outlookBand(for score: Double, evidenceLevel: EvidenceLevel) -> (label: String, color: Color) {
+        if evidenceLevel == .insufficient { return ("Learning", .gray) }
         if score >= 75 { return ("Rough patch", .red) }
         if score >= 45 { return ("A bit bumpy", .orange) }
         return ("Smooth sailing", .green)
     }
 
-    private func stabilityLabel(score: Double) -> String {
+    private func stabilityLabel(score: Double, evidenceLevel: EvidenceLevel) -> String {
+        if evidenceLevel == .insufficient { return "Still getting to know your patterns" }
         if score >= 75 { return "Pretty turbulent right now" }
         if score >= 45 { return "Some choppiness" }
         if score >= 20 { return "Mostly calm" }

@@ -50,6 +50,11 @@ struct InsightSnapshot {
     var weatherCoverageDays: Int
     var rainyMoodDelta: Double?
     var hotMoodDelta: Double?
+    // Sufficiency gate for user-facing narrative copy. Insufficient evidence
+    // means views should fall back to hedged "still learning" phrasing rather
+    // than confident trend labels.
+    var evidenceLevel: EvidenceLevel
+    var observationsLast14d: Int
 }
 
 enum InsightEngine {
@@ -120,7 +125,9 @@ enum InsightEngine {
             weatherCity: weather.city,
             weatherCoverageDays: weather.coverageDays,
             rainyMoodDelta: weather.rainyMoodDelta,
-            hotMoodDelta: weather.hotMoodDelta
+            hotMoodDelta: weather.hotMoodDelta,
+            evidenceLevel: bayesian.evidenceLevel,
+            observationsLast14d: bayesian.observationsLast14d
         )
     }
 
@@ -148,7 +155,14 @@ enum InsightEngine {
             .filter { !$0.isEmpty }
         guard !names.isEmpty else { return nil }
         let counts = Dictionary(grouping: names, by: { $0 }).mapValues(\.count)
-        return counts.max(by: { $0.value < $1.value })?.key
+        // Sort by count desc, then name asc, so ties resolve to a deterministic
+        // alphabetical winner instead of dictionary iteration order.
+        return counts
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .first?.key
     }
 
     private static func safetyAssessment(from bayesian: BayesianSafetyResult) -> SafetyAssessment {

@@ -42,6 +42,40 @@ final class MoodViewModelTests: XCTestCase {
         XCTAssertEqual(filtered.count, 2)
     }
 
+    // Regression: the previous wall-clock filter used `now - days*86_400` as
+    // the cutoff, so the inclusion of any entry from day -N depended on the
+    // time-of-day at which the filter ran. With now=9am and days=7, an entry
+    // at 23:59 of (today-7) was wrongly *included* (it sits after the 9am
+    // cutoff seven days back), and an entry at 8am of (today-7) — i.e., the
+    // morning of the same boundary day — was wrongly *dropped* by an earlier
+    // call at 7am the next day. Anchoring to startOfDay makes the cutoff
+    // calendar-day-aligned (midnight of today - (days-1)), so both mornings
+    // and evenings of the boundary day are treated consistently.
+    func testEntriesWithinDaysHonorsCalendarDayBoundary() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 4, day: 20, hour: 9, minute: 0))!
+        let startToday = calendar.startOfDay(for: now)
+
+        let morningOfDayMinus6 = calendar.date(byAdding: .day, value: -6, to: startToday)!
+            .addingTimeInterval(8 * 3_600)
+        let endOfDayMinus6 = calendar.date(byAdding: .day, value: -6, to: startToday)!
+            .addingTimeInterval((23 * 3_600) + (59 * 60))
+        let endOfDayMinus7 = calendar.date(byAdding: .day, value: -7, to: startToday)!
+            .addingTimeInterval((23 * 3_600) + (59 * 60))
+
+        let morningInside = MoodEntry(timestamp: morningOfDayMinus6, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+        let eveningInside = MoodEntry(timestamp: endOfDayMinus6, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+        let outside = MoodEntry(timestamp: endOfDayMinus7, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+
+        let filtered = MoodViewModel().entriesWithinDays(entries: [morningInside, eveningInside, outside], days: 7, now: now)
+        XCTAssertEqual(filtered.count, 2)
+        // Both ends of the boundary day are included regardless of time-of-day.
+        XCTAssertTrue(filtered.contains { $0.timestamp == morningOfDayMinus6 })
+        XCTAssertTrue(filtered.contains { $0.timestamp == endOfDayMinus6 })
+        // The previous calendar day (one day past the 7-day window) is not.
+        XCTAssertFalse(filtered.contains { $0.timestamp == endOfDayMinus7 })
+    }
+
     func testValidationRejectsInvalidEnergy() {
         XCTAssertThrowsError(
             try MoodEntryValidator.validate(

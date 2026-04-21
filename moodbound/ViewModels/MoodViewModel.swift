@@ -38,7 +38,12 @@ class MoodViewModel {
     }
 
     func entriesWithinDays(entries: [MoodEntry], days: Int, now: Date = AppClock.now) -> [MoodEntry] {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
+        // Anchor to start-of-day so a "last 7 days" filter at 9am still
+        // includes entries from the morning of day -7. Subtracting raw 24-hour
+        // intervals from the wall-clock `now` would silently drop those.
+        let calendar = Calendar.current
+        let startToday = calendar.startOfDay(for: now)
+        let cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: startToday) ?? startToday
         return entries.filter { $0.timestamp >= cutoff }
     }
 }

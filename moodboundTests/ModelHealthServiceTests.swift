@@ -29,4 +29,30 @@ final class ModelHealthServiceTests: XCTestCase {
         XCTAssertEqual(status.level, .healthy)
         XCTAssertLessThan(status.driftScore, 0.35)
     }
+
+    // Regression: staleDays previously used `now.timeIntervalSince(latest) / 86_400`,
+    // which counts 24-hour deltas, not calendar boundaries. An entry logged
+    // yesterday at 8pm against a "now" of 6am today is 10 hours old (= 0 days
+    // by raw delta) but is clearly 1 calendar day stale — the user missed a day.
+    func testStaleDaysCountsCalendarBoundaryNotRawHours() {
+        let calendar = Calendar.current
+        let yesterdayEvening = calendar.date(from: DateComponents(year: 2026, month: 4, day: 19, hour: 20, minute: 0))!
+        let thisMorning = calendar.date(from: DateComponents(year: 2026, month: 4, day: 20, hour: 6, minute: 0))!
+
+        let vector = TemporalFeatureVector(
+            timestamp: yesterdayEvening,
+            moodLevel: 0,
+            sleepHours: 7,
+            energy: 3,
+            anxiety: 0,
+            irritability: 0,
+            medAdherenceRate7d: nil,
+            triggerLoad7d: nil,
+            volatility7d: nil,
+            circadianDrift7d: nil
+        )
+        let forecast = ProbabilisticScore(value: 0.2, ciLow: 0.1, ciHigh: 0.3, calibrationError: 0.05)
+        let status = ModelHealthService.assess(vectors: [vector], forecast: forecast, now: thisMorning)
+        XCTAssertEqual(status.staleDays, 1)
+    }
 }

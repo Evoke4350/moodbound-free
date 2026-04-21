@@ -20,7 +20,11 @@ struct HomeView: View {
                         phaseNudgeCard(snapshot: snapshot)
                     }
                     quickAction
-                    statsGrid
+                    if entries.count < 3 {
+                        baselineCard
+                    } else {
+                        statsGrid
+                    }
                     recentSection
                 }
                 .padding(.horizontal, horizontalSizeClass == .regular ? 24 : 16)
@@ -120,7 +124,7 @@ struct HomeView: View {
 
     private func todayOutlookCard(snapshot: InsightSnapshot) -> some View {
         let score = outlookScore(snapshot: snapshot)
-        let band = outlookBand(score: score)
+        let band = outlookBand(score: score, evidenceLevel: snapshot.evidenceLevel)
         let trend = outlookTrend(snapshot: snapshot)
 
         return VStack(alignment: .leading, spacing: 10) {
@@ -138,7 +142,7 @@ struct HomeView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(stabilityLabel(score: score))
+                Text(stabilityLabel(score: score, evidenceLevel: snapshot.evidenceLevel))
                     .font(.title3.weight(.bold))
                 Spacer()
                 Text(trend)
@@ -226,6 +230,28 @@ struct HomeView: View {
                 body: "Some choppiness in your recent data. Sleep and routine can help settle things."
             )
         }
+    }
+
+    private var baselineCard: some View {
+        let logged = min(entries.count, 3)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(MoodboundDesign.tint)
+                Text("Building your baseline")
+                    .font(.headline)
+            }
+            Text("\(logged) / 3 entries logged. Insights unlock once you've logged 3.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            ProgressView(value: Double(logged), total: 3)
+                .tint(MoodboundDesign.tint)
+            Text("Log once a day for the most useful patterns.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
     }
 
     private var statsGrid: some View {
@@ -325,16 +351,18 @@ struct HomeView: View {
     }
 
     private var weekSleepText: String {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: appNow) ?? appNow
-        let recent = entries.filter { $0.timestamp >= cutoff }
-        guard !recent.isEmpty else { return "No data" }
-        let avg = recent.reduce(0.0) { $0 + $1.sleepHours } / Double(recent.count)
+        // sleepHours == 0 is the "unknown" sentinel; including it would
+        // crater the average. Skip those entries when averaging.
+        let knownSleep = viewModel.entriesWithinDays(entries: entries, days: 7, now: appNow)
+            .map(\.sleepHours)
+            .filter { $0 > 0 }
+        guard !knownSleep.isEmpty else { return "No data" }
+        let avg = knownSleep.reduce(0.0, +) / Double(knownSleep.count)
         return String(format: "%.1f h", avg)
     }
 
     private func entriesInLastDays(_ days: Int) -> Int {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: appNow) ?? appNow
-        return entries.filter { $0.timestamp >= cutoff }.count
+        viewModel.entriesWithinDays(entries: entries, days: days, now: appNow).count
     }
 
     private var insightSnapshot: InsightSnapshot? {
@@ -350,6 +378,10 @@ struct HomeView: View {
     }
 
     private func outlookTrend(snapshot: InsightSnapshot) -> String {
+        // With insufficient evidence, "Rising"/"Falling" reads as a confident
+        // short-term claim driven by ≤3 noisy data points. Hold the trend
+        // label at "Gathering" until there's enough recent data to support it.
+        if snapshot.evidenceLevel == .insufficient { return "Gathering trend" }
         guard let avg7 = snapshot.avg7, let avg30 = snapshot.avg30 else { return "Gathering trend" }
         let delta = avg7 - avg30
         if delta > 0.6 { return "Rising" }
@@ -357,13 +389,19 @@ struct HomeView: View {
         return "Stable"
     }
 
-    private func outlookBand(score: Double) -> (label: String, color: Color) {
+    private func outlookBand(score: Double, evidenceLevel: EvidenceLevel) -> (label: String, color: Color) {
+        // The score itself is a noisy 0–100 derived from drift / change-point
+        // posteriors that need a minimum window to be meaningful. Below that
+        // floor, every band reads as overclaiming, so we surface a neutral
+        // "Learning" pill instead.
+        if evidenceLevel == .insufficient { return ("Learning", .gray) }
         if score >= 75 { return ("Rough patch", .red) }
         if score >= 45 { return ("A bit bumpy", .orange) }
         return ("Smooth sailing", .green)
     }
 
-    private func stabilityLabel(score: Double) -> String {
+    private func stabilityLabel(score: Double, evidenceLevel: EvidenceLevel) -> String {
+        if evidenceLevel == .insufficient { return "Still getting to know your patterns" }
         if score >= 75 { return "Pretty turbulent right now" }
         if score >= 45 { return "Some choppiness" }
         if score >= 20 { return "Mostly calm" }
@@ -371,10 +409,18 @@ struct HomeView: View {
     }
 
     private func outlookSummary(snapshot: InsightSnapshot, score: Double) -> String {
-        if score >= 70 {
+        // Hedge before considering thresholds: a single bad day shouldn't
+        // surface "Things feel choppier than usual" copy.
+        if snapshot.evidenceLevel == .insufficient {
+            return L10n.tr("outlook.summary.learning")
+        }
+        // Thresholds intentionally aligned with outlookBand so a single score
+        // can't be labeled "Rough patch" by the badge while the supporting
+        // summary line says it's only "bumpy".
+        if score >= 75 {
             return L10n.tr("outlook.summary.rough")
         }
-        if score >= 40 {
+        if score >= 45 {
             return L10n.tr("outlook.summary.bumpy")
         }
         if snapshot.lowSleepCount14d > 0 {
