@@ -132,6 +132,42 @@ final class InsightEngineTests: XCTestCase {
         XCTAssertEqual(topNames.first ?? nil, "Alpha", "ties should resolve to the alphabetically first name")
     }
 
+    // Regression: with only 2 entries, the previous engine still emitted
+    // confident "shift" / "bumpier than usual" narrative bullets and the
+    // outlook badge could read "Rough patch", since none of those
+    // signals had a sample-size guard. The fix routes user-facing narrative
+    // through an EvidenceLevel gate; below 4 recent observations we surface
+    // a single "still learning your patterns" message instead.
+    func testSnapshotEvidenceLevelHedgesNarrativeWhenSparse() {
+        let now = Date()
+        let cal = Calendar.current
+        let entries: [MoodEntry] = (0..<2).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 3, energy: 5, sleepHours: 4, irritability: 3, anxiety: 3, note: ""
+            )
+        }
+        let snapshot = InsightEngine.snapshot(entries: entries, now: now)
+        XCTAssertEqual(snapshot.evidenceLevel, .insufficient)
+        XCTAssertEqual(snapshot.observationsLast14d, 2)
+        XCTAssertEqual(snapshot.safety.evidenceSignals.count, 1)
+        XCTAssertTrue(snapshot.safety.evidenceSignals.first?.lowercased().contains("learning") ?? false)
+    }
+
+    func testSnapshotEvidenceLevelEstablishedWithFullWindow() {
+        let now = Date()
+        let cal = Calendar.current
+        let entries: [MoodEntry] = (0..<14).map { i in
+            MoodEntry(
+                timestamp: cal.date(byAdding: .day, value: -i, to: now)!,
+                moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: ""
+            )
+        }
+        let snapshot = InsightEngine.snapshot(entries: entries, now: now)
+        XCTAssertEqual(snapshot.evidenceLevel, .established)
+        XCTAssertEqual(snapshot.observationsLast14d, 14)
+    }
+
     func testSnapshotRainyDeltaCountsOpenMeteoRainCodes() {
         let now = Date()
         let cal = Calendar.current

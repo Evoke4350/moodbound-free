@@ -50,6 +50,11 @@ struct InsightSnapshot {
     var weatherCoverageDays: Int
     var rainyMoodDelta: Double?
     var hotMoodDelta: Double?
+    // Sufficiency gate for user-facing narrative copy. Insufficient evidence
+    // means views should fall back to hedged "still learning" phrasing rather
+    // than confident trend labels.
+    var evidenceLevel: EvidenceLevel
+    var observationsLast14d: Int
 }
 
 enum InsightEngine {
@@ -120,7 +125,9 @@ enum InsightEngine {
             weatherCity: weather.city,
             weatherCoverageDays: weather.coverageDays,
             rainyMoodDelta: weather.rainyMoodDelta,
-            hotMoodDelta: weather.hotMoodDelta
+            hotMoodDelta: weather.hotMoodDelta,
+            evidenceLevel: bayesian.evidenceLevel,
+            observationsLast14d: bayesian.observationsLast14d
         )
     }
 

@@ -38,8 +38,17 @@ enum RiskForecastService {
             (0.7 * changeRate) -
             1.65
 
-        let value = sigmoid(linearScore)
+        // Pull the raw sigmoid output toward the neutral prior (0.5) when
+        // the recent window is sparse. The shrinkage weight grows linearly
+        // from 0 → 1 as recent.count approaches 14; below that, a single
+        // high-anxiety day can no longer drag the headline forecast above
+        // 0.5 by itself. The CI computed below already widens with sqrt(N),
+        // so we don't need to widen it further — only the point estimate
+        // was misbehaving as a confidence overstatement.
+        let rawValue = sigmoid(linearScore)
         let sampleSize = Double(recent.count)
+        let shrinkWeight = min(1.0, sampleSize / 14.0)
+        let value = (shrinkWeight * rawValue) + ((1.0 - shrinkWeight) * 0.5)
         let uncertaintyScale = max(0.08, 0.35 / sqrt(max(1.0, sampleSize)))
         let low = clamp(value - uncertaintyScale)
         let high = clamp(value + uncertaintyScale)

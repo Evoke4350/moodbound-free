@@ -13,6 +13,8 @@ struct BayesianSafetyResult: Equatable {
     let evidence: ModelEvidence
     let recommendedActions: [String]
     let messages: [String]
+    let evidenceLevel: EvidenceLevel
+    let observationsLast14d: Int
 }
 
 enum BayesianSafetyEngine {
@@ -34,11 +36,14 @@ enum BayesianSafetyEngine {
                 confidence: 0,
                 evidence: ModelEvidence(windowStart: Date(), windowEnd: Date(), signals: []),
                 recommendedActions: [],
-                messages: []
+                messages: [],
+                evidenceLevel: .insufficient,
+                observationsLast14d: 0
             )
         }
 
         let recent = Array(sorted.suffix(14))
+        let evidenceLevel = EvidenceLevel.from(observationCount: recent.count)
         let lowSleepRate = fraction(recent.map { $0.sleepHours < 6.0 })
         let highVolatilityRate = fraction(recent.map { ($0.volatility7d ?? 0) >= 1.1 })
 
@@ -80,7 +85,17 @@ enum BayesianSafetyEngine {
         let likelihoodRatio = exp(logLR)
 
         let posteriorOdds = priorOdds * likelihoodRatio
-        let posteriorRisk = posteriorOdds / (1.0 + posteriorOdds)
+        let rawPosteriorRisk = posteriorOdds / (1.0 + posteriorOdds)
+
+        // Shrinkage: pull the posterior toward the prior (0.22) when the
+        // window is sparse. With N=2, the LR can spike high off a single
+        // distressing day; without this, severity could escalate to .high
+        // or .critical from two data points. The weight grows linearly to
+        // 1.0 by N=14, so an established record sees no attenuation.
+        // Severity bands and threshold values are unchanged — only the
+        // posterior they read from is now sample-size aware.
+        let shrinkWeight = min(1.0, Double(recent.count) / 14.0)
+        let posteriorRisk = (shrinkWeight * rawPosteriorRisk) + ((1.0 - shrinkWeight) * prior)
 
         let severity: SafetySeverity
         switch posteriorRisk {
@@ -94,36 +109,47 @@ enum BayesianSafetyEngine {
             severity = .none
         }
 
+        // With < 4 recent observations, every "trend" / "shift" signal is
+        // dominated by single-day variance. Emitting "There's been a
+        // noticeable shift" off two data points reads as the app overreacting.
+        // Replace the narrative bullets with a single hedged sentence so the
+        // user knows we're listening but not pretending to be confident.
+        // The numeric severity above is left untouched: if the data really
+        // does indicate distress, the safety actions still surface.
         var signals: [String] = []
-        if forecast.value >= 0.6 {
-            signals.append("Your week ahead looks bumpier than usual.")
-        }
-        if elevatedPosterior >= 0.45 {
-            signals.append("Your recent pattern is leaning toward the high end.")
-        }
-        if depressivePosterior >= 0.45 {
-            signals.append("Your recent pattern is leaning toward the low end.")
-        }
-        if lowSleepRate >= 0.3 {
-            signals.append("You've had several short sleep nights recently.")
-        }
-        if highVolatilityRate >= 0.35 {
-            signals.append("Your mood has been swinging more than usual.")
-        }
-        if !changePoints.isEmpty {
-            signals.append("There's been a noticeable shift in your pattern recently.")
-        }
-        if bayesianChangeProbability >= 0.25 {
-            signals.append("Things seem to be shifting — worth paying attention to.")
-        }
-        if wassersteinDriftScore >= 0.22 {
-            signals.append("Your recent days look different from your usual pattern.")
-        }
-        if lowHRVRate >= 0.3 {
-            signals.append("Your heart rate variability has been low — your body may be under stress.")
-        }
-        if lowActivityRate >= 0.4 {
-            signals.append("Your activity has been unusually low recently.")
+        if evidenceLevel == .insufficient {
+            signals.append("We're still learning your patterns — a few more check-ins will sharpen these insights.")
+        } else {
+            if forecast.value >= 0.6 {
+                signals.append("Your week ahead looks bumpier than usual.")
+            }
+            if elevatedPosterior >= 0.45 {
+                signals.append("Your recent pattern is leaning toward the high end.")
+            }
+            if depressivePosterior >= 0.45 {
+                signals.append("Your recent pattern is leaning toward the low end.")
+            }
+            if lowSleepRate >= 0.3 {
+                signals.append("You've had several short sleep nights recently.")
+            }
+            if highVolatilityRate >= 0.35 {
+                signals.append("Your mood has been swinging more than usual.")
+            }
+            if !changePoints.isEmpty {
+                signals.append("There's been a noticeable shift in your pattern recently.")
+            }
+            if bayesianChangeProbability >= 0.25 {
+                signals.append("Things seem to be shifting — worth paying attention to.")
+            }
+            if wassersteinDriftScore >= 0.22 {
+                signals.append("Your recent days look different from your usual pattern.")
+            }
+            if lowHRVRate >= 0.3 {
+                signals.append("Your heart rate variability has been low — your body may be under stress.")
+            }
+            if lowActivityRate >= 0.4 {
+                signals.append("Your activity has been unusually low recently.")
+            }
         }
 
         let recommendedActions: [String]
@@ -150,7 +176,9 @@ enum BayesianSafetyEngine {
                 signals: signals
             ),
             recommendedActions: recommendedActions,
-            messages: SafetyCopyPolicy.sanitize(signals)
+            messages: SafetyCopyPolicy.sanitize(signals),
+            evidenceLevel: evidenceLevel,
+            observationsLast14d: recent.count
         )
     }
 

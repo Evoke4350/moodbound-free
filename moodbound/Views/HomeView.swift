@@ -124,7 +124,7 @@ struct HomeView: View {
 
     private func todayOutlookCard(snapshot: InsightSnapshot) -> some View {
         let score = outlookScore(snapshot: snapshot)
-        let band = outlookBand(score: score)
+        let band = outlookBand(score: score, evidenceLevel: snapshot.evidenceLevel)
         let trend = outlookTrend(snapshot: snapshot)
 
         return VStack(alignment: .leading, spacing: 10) {
@@ -142,7 +142,7 @@ struct HomeView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(stabilityLabel(score: score))
+                Text(stabilityLabel(score: score, evidenceLevel: snapshot.evidenceLevel))
                     .font(.title3.weight(.bold))
                 Spacer()
                 Text(trend)
@@ -378,6 +378,10 @@ struct HomeView: View {
     }
 
     private func outlookTrend(snapshot: InsightSnapshot) -> String {
+        // With insufficient evidence, "Rising"/"Falling" reads as a confident
+        // short-term claim driven by ≤3 noisy data points. Hold the trend
+        // label at "Gathering" until there's enough recent data to support it.
+        if snapshot.evidenceLevel == .insufficient { return "Gathering trend" }
         guard let avg7 = snapshot.avg7, let avg30 = snapshot.avg30 else { return "Gathering trend" }
         let delta = avg7 - avg30
         if delta > 0.6 { return "Rising" }
@@ -385,13 +389,19 @@ struct HomeView: View {
         return "Stable"
     }
 
-    private func outlookBand(score: Double) -> (label: String, color: Color) {
+    private func outlookBand(score: Double, evidenceLevel: EvidenceLevel) -> (label: String, color: Color) {
+        // The score itself is a noisy 0–100 derived from drift / change-point
+        // posteriors that need a minimum window to be meaningful. Below that
+        // floor, every band reads as overclaiming, so we surface a neutral
+        // "Learning" pill instead.
+        if evidenceLevel == .insufficient { return ("Learning", .gray) }
         if score >= 75 { return ("Rough patch", .red) }
         if score >= 45 { return ("A bit bumpy", .orange) }
         return ("Smooth sailing", .green)
     }
 
-    private func stabilityLabel(score: Double) -> String {
+    private func stabilityLabel(score: Double, evidenceLevel: EvidenceLevel) -> String {
+        if evidenceLevel == .insufficient { return "Still getting to know your patterns" }
         if score >= 75 { return "Pretty turbulent right now" }
         if score >= 45 { return "Some choppiness" }
         if score >= 20 { return "Mostly calm" }
@@ -399,6 +409,11 @@ struct HomeView: View {
     }
 
     private func outlookSummary(snapshot: InsightSnapshot, score: Double) -> String {
+        // Hedge before considering thresholds: a single bad day shouldn't
+        // surface "Things feel choppier than usual" copy.
+        if snapshot.evidenceLevel == .insufficient {
+            return L10n.tr("outlook.summary.learning")
+        }
         // Thresholds intentionally aligned with outlookBand so a single score
         // can't be labeled "Rough patch" by the badge while the supporting
         // summary line says it's only "bumpy".

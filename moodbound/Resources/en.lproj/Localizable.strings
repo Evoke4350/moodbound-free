@@ -16,6 +16,8 @@
 "outlook.summary.bumpy" = "Some ups and downs lately. Sticking to your routine will help — watch for any sudden changes.";
 "outlook.summary.low_sleep_watch" = "Mostly steady, but a few short-sleep nights could tip things. Keep an eye on rest.";
 "outlook.summary.steady" = "You're in a good rhythm right now. Keep it up.";
+/* Shown when there are fewer than ~4 recent check-ins — the model can't say much yet, so we're explicit about that instead of overclaiming. */
+"outlook.summary.learning" = "Just a few entries so far. A few more check-ins and these insights will get sharper.";
 
 /* Data confidence tooltip shown under the concern-level / data-confidence / predictability row. */
 "insights.data_confidence.tooltip" = "More entries = sharper picture. Keep logging and your insights will get better.";
