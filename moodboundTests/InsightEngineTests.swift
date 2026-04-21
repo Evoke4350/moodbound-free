@@ -107,6 +107,31 @@ final class InsightEngineTests: XCTestCase {
         XCTAssertEqual(snapshot.highSleepCount14d, 3)
     }
 
+    // Regression: counts.max(by:) iterated dictionary order, so two triggers
+    // tied on count returned a non-deterministic name (Anvil sometimes,
+    // Stress others). The fix sorts by (-count, name) so ties resolve
+    // alphabetically. Repeating the snapshot must always pick the same name.
+    func testSnapshotTopTriggerTieBreakIsDeterministicAndAlphabetical() {
+        let now = Date()
+        let cal = Calendar.current
+        let alpha = TriggerFactor(name: "Alpha", category: "social")
+        let zulu = TriggerFactor(name: "Zulu", category: "social")
+
+        var entries: [MoodEntry] = []
+        for i in 0..<6 {
+            let date = cal.date(byAdding: .day, value: -i, to: now)!
+            let entry = MoodEntry(timestamp: date, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+            // Equal count: 3 Alpha events and 3 Zulu events across 6 days.
+            let trigger = i % 2 == 0 ? alpha : zulu
+            entry.triggerEvents = [TriggerEvent(timestamp: date, intensity: 2, trigger: trigger, moodEntry: entry)]
+            entries.append(entry)
+        }
+
+        let topNames = (0..<5).map { _ in InsightEngine.snapshot(entries: entries, now: now).topTrigger14d }
+        XCTAssertEqual(Set(topNames).count, 1, "topTrigger14d should be stable across repeated calls")
+        XCTAssertEqual(topNames.first ?? nil, "Alpha", "ties should resolve to the alphabetically first name")
+    }
+
     func testSnapshotRainyDeltaCountsOpenMeteoRainCodes() {
         let now = Date()
         let cal = Calendar.current

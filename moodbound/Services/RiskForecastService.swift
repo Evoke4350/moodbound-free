@@ -28,18 +28,14 @@ enum RiskForecastService {
         let depressivePosterior = average(latent.posteriors.suffix(14).map { $0.distribution.depressive })
         let lowSleepRate = fraction(recent.map { $0.sleepHours < 6.0 })
         let highVolatilityRate = fraction(recent.map { ($0.volatility7d ?? 0) >= 1.1 })
-        // Bug fix: previously `recent.count / 3` was integer division, so
-        // counts of 1 and 2 collapsed to 0 (then clamped to 1.0 by max), and
-        // counts of 4 and 5 both became 1 — flattening the rate scale at the
-        // low end. Use Double division so the denominator scales smoothly.
-        let recentChangeRate = min(1.0, Double(changePoints.count) / max(1.0, Double(recent.count) / 3.0))
+        let changeRate = recentChangeRate(changeCount: changePoints.count, recentCount: recent.count)
 
         let linearScore =
             (1.2 * elevatedPosterior) +
             (1.2 * depressivePosterior) +
             (0.9 * lowSleepRate) +
             (0.8 * highVolatilityRate) +
-            (0.7 * recentChangeRate) -
+            (0.7 * changeRate) -
             1.65
 
         let value = sigmoid(linearScore)
@@ -57,6 +53,16 @@ enum RiskForecastService {
             ciHigh: max(low, high),
             calibrationError: calibrationError
         )
+    }
+
+    // Internal so tests can pin the small-N behavior. Previously this was
+    // `recent.count / 3` (integer division), which made N=1,2 collapse to 0
+    // and N=4,5 collapse to 1 — flattening the rate scale at the low end so
+    // a single change point would saturate to 1.0 across N=1..5. Double
+    // division keeps the denominator continuous; max(1.0, …) prevents
+    // amplification when N<3 would otherwise inflate the rate above 1.
+    static func recentChangeRate(changeCount: Int, recentCount: Int) -> Double {
+        min(1.0, Double(changeCount) / max(1.0, Double(recentCount) / 3.0))
     }
 
     private static func sigmoid(_ x: Double) -> Double {

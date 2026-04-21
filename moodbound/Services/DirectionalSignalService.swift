@@ -38,8 +38,16 @@ enum DirectionalSignalService {
             ("Medication Adherence", "Next-Day Volatility (inverse)", medProbe.negated),
         ]
 
+        // We need *enough* pairs after nil-drop to compute a stable correlation.
+        // Pearson is meaningless with <3 pairs; below ~half the available
+        // observations we can't trust the signal. Scale the floor relative to
+        // the maximum possible (sorted.count - lagDays), with a hard minimum of
+        // 4 so very short series can still produce a low-confidence hint.
+        let maxPossiblePairs = sorted.count - lagDays
+        let minPairs = max(4, (maxPossiblePairs * 2) / 3)
+
         return candidates
-            .filter { $0.2.pairs >= 6 && abs($0.2.r) >= 0.25 }
+            .filter { $0.2.pairs >= minPairs && abs($0.2.r) >= 0.25 }
             .map { source, target, result in
                 let confidence = min(0.95, abs(result.r) * sqrt(Double(result.pairs) / 20.0))
                 return DirectionalSignalProbe(

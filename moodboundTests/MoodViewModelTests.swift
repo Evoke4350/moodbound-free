@@ -42,6 +42,31 @@ final class MoodViewModelTests: XCTestCase {
         XCTAssertEqual(filtered.count, 2)
     }
 
+    // Regression: with the previous wall-clock filter, an entry from the morning
+    // of the boundary day was silently dropped because we subtracted N*86_400s
+    // from `now` instead of anchoring to the start of `now`'s day. The
+    // entriesWithinDays(days: 7) contract is "today + 6 prior calendar days",
+    // so an entry at 23:59 of (today - 6) MUST be included and an entry at
+    // 23:59 of (today - 7) MUST NOT.
+    func testEntriesWithinDaysHonorsCalendarDayBoundary() {
+        let calendar = Calendar.current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 4, day: 20, hour: 9, minute: 0))!
+        let startToday = calendar.startOfDay(for: now)
+
+        let endOfDayMinus6 = calendar.date(byAdding: .day, value: -6, to: startToday)!
+            .addingTimeInterval((23 * 3_600) + (59 * 60))
+        let endOfDayMinus7 = calendar.date(byAdding: .day, value: -7, to: startToday)!
+            .addingTimeInterval((23 * 3_600) + (59 * 60))
+
+        let inside = MoodEntry(timestamp: endOfDayMinus6, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+        let outside = MoodEntry(timestamp: endOfDayMinus7, moodLevel: 0, energy: 3, sleepHours: 7, irritability: 0, anxiety: 0, note: "")
+
+        let filtered = MoodViewModel().entriesWithinDays(entries: [inside, outside], days: 7, now: now)
+        XCTAssertEqual(filtered.count, 1)
+        XCTAssertTrue(filtered.contains { $0.timestamp == endOfDayMinus6 })
+        XCTAssertFalse(filtered.contains { $0.timestamp == endOfDayMinus7 })
+    }
+
     func testValidationRejectsInvalidEnergy() {
         XCTAssertThrowsError(
             try MoodEntryValidator.validate(

@@ -53,16 +53,17 @@ enum MedicationTrajectoryService {
 
             let support = min(takenShort.count, missedShort.count)
             let sufficient = support >= minimumSamples
-            // Both arms must have at least one observation before we can
-            // produce a delta; otherwise average([])==0 would silently masquerade
-            // as a real risk score and the difference would be meaningless.
+            // Both arms must have at least one observation before we can produce
+            // a delta; otherwise average([])==0 would silently masquerade as a
+            // real risk score and the difference would be meaningless. The
+            // producer loop above appends to short and medium together, so the
+            // medium arrays' counts mirror the short arrays' counts.
             guard let takenShortAvg = mean(takenShort),
-                  let missedShortAvg = mean(missedShort) else { return nil }
+                  let missedShortAvg = mean(missedShort),
+                  let takenMediumAvg = mean(takenMedium),
+                  let missedMediumAvg = mean(missedMedium) else { return nil }
             let shortDelta = takenShortAvg - missedShortAvg
-            let mediumDelta: Double = {
-                guard let t = mean(takenMedium), let m = mean(missedMedium) else { return shortDelta }
-                return t - m
-            }()
+            let mediumDelta = takenMediumAvg - missedMediumAvg
             let spread = standardDeviation(takenShort + missedShort + takenMedium + missedMedium)
             let uncertainty = max(0.05, min(1.0, spread / sqrt(Double(max(1, support)))))
 
