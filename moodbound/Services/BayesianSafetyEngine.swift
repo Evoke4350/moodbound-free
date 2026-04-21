@@ -129,7 +129,11 @@ enum BayesianSafetyEngine {
         if evidenceLevel == .insufficient {
             signals.append("We're still learning your patterns — a few more check-ins will sharpen these insights.")
         } else {
-            if forecast.value >= 0.6 {
+            // Use rawValue so this bullet fires off the same forecast magnitude
+            // the LR above used. If we read forecast.value (shrunk), severity
+            // could escalate at N=4..10 from a strong signal while this copy
+            // stayed silent — the user would see the badge with no explanation.
+            if forecast.rawValue >= 0.6 {
                 signals.append("Your week ahead looks bumpier than usual.")
             }
             if elevatedPosterior >= 0.45 {

@@ -68,6 +68,13 @@ final class BayesianSafetyEngineTests: XCTestCase {
         let result = evaluate(vectors: vectors)
         XCTAssertGreaterThanOrEqual(rank(result.severity), rank(.elevated),
             "N=6 with severe distress should escalate beyond .none after the double-shrinkage fix")
+        // Ceiling: routing forecast.rawValue (vs. shrunk value) into the LR
+        // raises its magnitude. Six days should not be enough to push severity
+        // all the way to .critical — that would mean the user can hit the
+        // top alert tier from less than a week of data, which is the failure
+        // mode the original shrinkage was designed to prevent.
+        XCTAssertLessThan(rank(result.severity), rank(.critical),
+            "N=6 must not be enough data to escalate to .critical, even with severe distress")
         XCTAssertGreaterThan(result.posteriorRisk, 0.22,
             "Posterior should rise meaningfully above the prior, not collapse back into it")
     }

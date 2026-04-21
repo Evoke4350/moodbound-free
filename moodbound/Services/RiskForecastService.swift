@@ -16,6 +16,11 @@ struct ProbabilisticScore: Equatable {
         ciHigh - ciLow
     }
 
+    // `rawValue` defaults to `value` for ergonomic test fixture construction,
+    // but any production path that constructs a ProbabilisticScore from a
+    // shrunk number MUST pass the unshrunk value explicitly. Without that,
+    // BayesianSafetyEngine will silently re-introduce the double-shrinkage
+    // bug — its LR reads `rawValue` precisely to avoid that compound.
     init(value: Double, ciLow: Double, ciHigh: Double, calibrationError: Double, rawValue: Double? = nil) {
         self.value = value
         self.ciLow = ciLow
