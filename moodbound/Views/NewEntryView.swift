@@ -27,12 +27,21 @@ struct NewEntryView: View {
     @State private var newlyAddedTriggers: Set<String> = []
     @State private var showingSaveError = false
     @State private var saveErrorMessage = ""
+    @State private var showingZeroSleepConfirm = false
+    @State private var healthKitSleepLookupMessage: String?
     @State private var savedFeedback: SavedFeedback?
     @State private var didApplyDefaults = false
     @State private var currentWeather: OpenMeteoWeatherService.CurrentWeather?
     @State private var weatherStatus: WeatherFetchStatus = .idle
     @State private var weatherExplicitlyRemoved = false
     @State private var locationService = LocationService()
+    @State private var manualEntryMode: ManualWeatherEntryMode = .none
+    @State private var cityInput: String = ""
+    @State private var cityLookupInFlight: Bool = false
+    @State private var cityLookupError: String?
+    @State private var manualCondition: ManualWeatherCondition = .clear
+    @State private var manualTemperature: String = ""
+    @State private var manualCity: String = ""
     @State private var sleepSource: SleepSource = .manual
     @State private var restingHeartRate: Double?
     @State private var hrvSDNN: Double?
@@ -156,33 +165,35 @@ struct NewEntryView: View {
                     Text("Energy Level")
                 }
 
-                Section {
-                    HStack {
-                        Image(systemName: "moon.fill")
-                            .foregroundStyle(.indigo)
-                        Slider(value: $sleepHours, in: 0...16, step: 0.5)
-                            .accessibilityLabel("Sleep hours")
-                            .accessibilityValue("\(String(format: "%.1f", sleepHours)) hours")
-                        Text(String(format: "%.1fh", sleepHours))
-                            .monospacedDigit()
-                            .frame(width: 44)
-                    }
-                    if sleepSource == .healthKit {
-                        HStack(spacing: 6) {
-                            Image(systemName: "heart.fill")
-                                .foregroundStyle(.red)
-                                .font(.caption)
-                            Text("From Apple Health — adjust if needed")
+                if shouldShowSleepSection {
+                    Section {
+                        HStack {
+                            Image(systemName: "moon.fill")
+                                .foregroundStyle(.indigo)
+                            Slider(value: $sleepHours, in: 0...16, step: 0.5)
+                                .accessibilityLabel("Sleep hours")
+                                .accessibilityValue("\(String(format: "%.1f", sleepHours)) hours")
+                            Text(String(format: "%.1fh", sleepHours))
+                                .monospacedDigit()
+                                .frame(width: 44)
+                        }
+                        if sleepSource == .healthKit {
+                            HStack(spacing: 6) {
+                                Image(systemName: "heart.fill")
+                                    .foregroundStyle(.red)
+                                    .font(.caption)
+                                Text("From Apple Health — adjust if needed")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("How much sleep did you get last night?")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                    } else {
-                        Text(hasLoggedSleepToday ? "Include naps or additional rest since your last check-in. Set to 0 if none." : "How much sleep did you get last night?")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    } header: {
+                        Text("Sleep")
                     }
-                } header: {
-                    Text("Sleep")
                 }
 
                 Section {
@@ -319,6 +330,31 @@ struct NewEntryView: View {
             } message: {
                 Text(saveErrorMessage)
             }
+            .alert("0 hours of sleep?", isPresented: $showingZeroSleepConfirm) {
+                if healthKitSleepEnabled {
+                    Button("Use Apple Health") {
+                        Task { await fillSleepFromHealthKitAndSave() }
+                    }
+                }
+                Button("Yes, that's right") {
+                    saveAndDismiss(bypassZeroSleepCheck: true)
+                }
+                Button("Edit", role: .cancel) {}
+            } message: {
+                if healthKitSleepEnabled {
+                    Text("Everyone has to sleep — this looks unlikely. You can pull last night's sleep from Apple Health, confirm 0 hours is correct, or edit the value.")
+                } else {
+                    Text("Everyone has to sleep — this looks unlikely. Confirm 0 hours is correct, or edit the value. Enable Apple Health in Settings to import sleep.")
+                }
+            }
+            .alert("Apple Health", isPresented: Binding(
+                get: { healthKitSleepLookupMessage != nil },
+                set: { if !$0 { healthKitSleepLookupMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(healthKitSleepLookupMessage ?? "")
+            }
             .overlay {
                 if let feedback = savedFeedback {
                     savedFeedbackOverlay(feedback)
@@ -329,7 +365,27 @@ struct NewEntryView: View {
         }
     }
 
-    private func saveAndDismiss() {
+    private func saveAndDismiss(bypassZeroSleepCheck: Bool = false) {
+        // When the sleep section is hidden, ensure the saved record matches
+        // today's authoritative sleep value rather than whatever the slider
+        // happened to be initialized to. This is belt-and-suspenders against
+        // a save firing before applySmartDefaults runs.
+        if entryToEdit == nil, !shouldShowSleepSection,
+           let inherited = todaysAuthoritativeSleepHours {
+            sleepHours = inherited
+        }
+
+        // Guardrail: 0-hour sleep is almost certainly wrong ("everyone has to
+        // sleep"). Block the save and let the user reconsider, optionally
+        // pulling from Apple Health. Skipped when the section is hidden
+        // because the value was inherited from today's authoritative entry,
+        // which we already validated as > 0.
+        if !bypassZeroSleepCheck, shouldShowSleepSection, sleepHours <= 0 {
+            healthKitSleepLookupMessage = nil
+            showingZeroSleepConfirm = true
+            return
+        }
+
         let saveTimestamp = timestamp
         let saveMoodLevel = moodLevel
         let weatherPayload = NewEntryWeatherPersistence.resolve(
@@ -421,15 +477,34 @@ struct NewEntryView: View {
         }
     }
 
+    /// Triggered from the 0-hour sleep guardrail when the user picks
+    /// "Use Apple Health". Fetches last night's sleep; if found, applies it
+    /// and proceeds with the save bypassing the guardrail. If Apple Health
+    /// has nothing, surfaces an inline alert and stays on the form.
+    private func fillSleepFromHealthKitAndSave() async {
+        if let hours = await HealthKitService.fetchLastNightSleepHours(), hours > 0 {
+            sleepHours = hours
+            sleepSource = .healthKit
+            saveAndDismiss(bypassZeroSleepCheck: true)
+        } else {
+            healthKitSleepLookupMessage = "No sleep data in Apple Health for last night."
+        }
+    }
+
     private func applySmartDefaults() {
-        guard entryToEdit == nil, !didApplyDefaults, let last = recentEntries.first else { return }
+        guard entryToEdit == nil, !didApplyDefaults else { return }
         didApplyDefaults = true
 
-        if hasLoggedSleepToday {
-            sleepHours = 0
-        } else {
-            sleepHours = last.sleepHours
+        // Sleep: if today already has an authoritative entry with sleep > 0,
+        // inherit its value so the new entry's saved record matches the rest
+        // of today's records. Sleep is intentionally NOT carried across days
+        // — stale values from prior days were producing wrong saves when the
+        // user didn't touch the slider.
+        if let inherited = todaysAuthoritativeSleepHours {
+            sleepHours = inherited
         }
+
+        guard let last = recentEntries.first else { return }
         energy = last.energy
 
         // Carry forward active medications from last entry
@@ -585,6 +660,40 @@ struct NewEntryView: View {
         return recentEntries.contains { calendar.startOfDay(for: $0.timestamp) == todayStart }
     }
 
+    /// Sleep is fundamentally a once-per-night measurement, but we store it
+    /// per entry. To keep the day's records consistent, we treat the sleep
+    /// value from the FIRST entry on the same calendar day as authoritative
+    /// for the whole day — subsequent entries inherit it instead of asking
+    /// the user to remember and re-type.
+    ///
+    /// Excludes the entry being edited so editing the first-of-day entry
+    /// still shows its own value (and lets the user change it).
+    /// Returns nil if no other entry on the same calendar day exists, or if
+    /// the existing value is 0 (treated as bad data — don't propagate it).
+    private var todaysAuthoritativeSleepHours: Double? {
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: timestamp)
+        let editingID = entryToEdit?.persistentModelID
+        let sameDayOthers = recentEntries.filter {
+            calendar.startOfDay(for: $0.timestamp) == dayStart && $0.persistentModelID != editingID
+        }
+        // Earliest entry of the day is the authoritative one.
+        guard let earliest = sameDayOthers.min(by: { $0.timestamp < $1.timestamp }) else {
+            return nil
+        }
+        guard earliest.sleepHours > 0 else { return nil }
+        return earliest.sleepHours
+    }
+
+    /// Hide the sleep section when (a) we're creating a new entry, (b) today
+    /// already has an authoritative sleep value, and (c) that value is > 0.
+    /// Editing an existing entry always shows the section so the user can
+    /// correct that specific entry's record.
+    private var shouldShowSleepSection: Bool {
+        if entryToEdit != nil { return true }
+        return todaysAuthoritativeSleepHours == nil
+    }
+
     private var newlyAddedTriggerNames: [String] {
         let existingNormalized = Set(allTriggers.map(\.normalizedName))
         return newlyAddedTriggers
@@ -611,15 +720,18 @@ struct NewEntryView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(w.summary), \(formattedTemperature(w.temperatureC))")
                                 .font(.subheadline.weight(.semibold))
-                            Text(w.city)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if !w.city.isEmpty {
+                                Text(w.city)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         Button {
                             currentWeather = nil
                             weatherStatus = .skipped
                             weatherExplicitlyRemoved = true
+                            manualEntryMode = .none
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.secondary)
@@ -632,10 +744,11 @@ struct NewEntryView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "location.slash")
                         .foregroundStyle(.secondary)
-                    Text("Location access needed for weather")
+                    Text("Location off — set weather another way")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                manualEntryControls(includeRetry: false)
             case .failed:
                 HStack(spacing: 8) {
                     Image(systemName: "cloud.slash")
@@ -643,21 +756,157 @@ struct NewEntryView: View {
                     Text("Couldn't load weather")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Retry") {
-                        weatherStatus = .idle
-                        Task { await fetchWeatherIfNeeded() }
-                    }
-                    .font(.subheadline)
                 }
+                manualEntryControls(includeRetry: true)
             case .skipped:
-                EmptyView()
+                Button {
+                    weatherExplicitlyRemoved = false
+                    weatherStatus = .denied
+                    manualEntryMode = .none
+                } label: {
+                    Label("Add weather", systemImage: "plus.circle")
+                        .font(.subheadline)
+                }
             }
         } header: {
-            if weatherStatus != .skipped {
-                Text("Weather")
-            }
+            Text("Weather")
         }
+    }
+
+    @ViewBuilder
+    private func manualEntryControls(includeRetry: Bool) -> some View {
+        switch manualEntryMode {
+        case .none:
+            if includeRetry {
+                Button {
+                    weatherStatus = .idle
+                    Task { await fetchWeatherIfNeeded() }
+                } label: {
+                    Label("Retry with location", systemImage: "arrow.clockwise")
+                        .font(.subheadline)
+                }
+            }
+            Button {
+                cityLookupError = nil
+                manualEntryMode = .city
+            } label: {
+                Label("Enter a city", systemImage: "magnifyingglass")
+                    .font(.subheadline)
+            }
+            Button {
+                manualEntryMode = .manual
+            } label: {
+                Label("Set weather manually", systemImage: "pencil")
+                    .font(.subheadline)
+            }
+        case .city:
+            HStack {
+                TextField("City (e.g. Boston)", text: $cityInput)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .onSubmit { Task { await submitCityLookup() } }
+                if cityLookupInFlight {
+                    ProgressView()
+                } else if !cityInput.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Button {
+                        Task { await submitCityLookup() }
+                    } label: {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .foregroundStyle(MoodboundDesign.tint)
+                    }
+                }
+            }
+            if let err = cityLookupError {
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            Button("Cancel") {
+                manualEntryMode = .none
+                cityInput = ""
+                cityLookupError = nil
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        case .manual:
+            Picker("Conditions", selection: $manualCondition) {
+                ForEach(ManualWeatherCondition.allCases) { condition in
+                    Text("\(condition.emoji)  \(condition.rawValue)")
+                        .tag(condition)
+                }
+            }
+            HStack {
+                Text(usesMetric ? "Temperature (°C)" : "Temperature (°F)")
+                Spacer()
+                TextField(usesMetric ? "20" : "68", text: $manualTemperature)
+                    .keyboardType(.numbersAndPunctuation)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 80)
+            }
+            TextField("Place (optional)", text: $manualCity)
+                .textInputAutocapitalization(.words)
+            Button("Save weather") {
+                applyManualWeather()
+            }
+            .disabled(parsedManualTemperature == nil)
+            Button("Cancel") {
+                manualEntryMode = .none
+                manualTemperature = ""
+                manualCity = ""
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private func submitCityLookup() async {
+        let trimmed = cityInput.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !cityLookupInFlight else { return }
+        cityLookupInFlight = true
+        cityLookupError = nil
+        defer { cityLookupInFlight = false }
+        do {
+            let location = try await OpenMeteoWeatherService.geocodeCity(trimmed)
+            let weather = try await OpenMeteoWeatherService.fetchCurrentWeather(location: location)
+            currentWeather = weather
+            weatherStatus = .success
+            weatherExplicitlyRemoved = false
+            manualEntryMode = .none
+            cityInput = ""
+        } catch OpenMeteoWeatherService.WeatherError.noLocationFound {
+            cityLookupError = "Couldn't find that city. Try a different spelling."
+        } catch {
+            AppLogger.error("Manual city weather fetch failed", error: error)
+            cityLookupError = "Couldn't reach the weather service. Try again."
+        }
+    }
+
+    private func applyManualWeather() {
+        guard let celsius = parsedManualTemperature else { return }
+        let cityName = manualCity.trimmingCharacters(in: .whitespaces)
+        currentWeather = OpenMeteoWeatherService.CurrentWeather(
+            city: cityName,
+            weatherCode: manualCondition.weatherCode,
+            temperatureC: celsius,
+            precipitationMM: 0,
+            summary: manualCondition.rawValue
+        )
+        weatherStatus = .success
+        weatherExplicitlyRemoved = false
+        manualEntryMode = .none
+        manualTemperature = ""
+        manualCity = ""
+    }
+
+    private var parsedManualTemperature: Double? {
+        let trimmed = manualTemperature.trimmingCharacters(in: .whitespaces)
+        guard let value = Double(trimmed) else { return nil }
+        return usesMetric ? value : ((value - 32) * 5.0 / 9.0)
+    }
+
+    private var usesMetric: Bool {
+        Locale.current.measurementSystem == .metric
     }
 
     private func fetchWeatherIfNeeded() async {
@@ -868,6 +1117,52 @@ enum WeatherFetchStatus {
 
 enum SleepSource {
     case manual, healthKit
+}
+
+enum ManualWeatherEntryMode {
+    case none, city, manual
+}
+
+enum ManualWeatherCondition: String, CaseIterable, Identifiable {
+    case clear = "Clear"
+    case partlyCloudy = "Partly cloudy"
+    case cloudy = "Cloudy"
+    case fog = "Fog"
+    case drizzle = "Drizzle"
+    case rain = "Rain"
+    case snow = "Snow"
+    case thunderstorm = "Thunderstorm"
+
+    var id: String { rawValue }
+
+    // Picks a representative Open-Meteo WMO weather code for each
+    // user-facing category so downstream rendering (emoji, summary) uses
+    // the same path as API-sourced weather.
+    var weatherCode: Int {
+        switch self {
+        case .clear: return 0
+        case .partlyCloudy: return 2
+        case .cloudy: return 3
+        case .fog: return 45
+        case .drizzle: return 51
+        case .rain: return 61
+        case .snow: return 71
+        case .thunderstorm: return 95
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .clear: return "☀️"
+        case .partlyCloudy: return "🌤️"
+        case .cloudy: return "☁️"
+        case .fog: return "🌫️"
+        case .drizzle: return "🌦️"
+        case .rain: return "🌧️"
+        case .snow: return "❄️"
+        case .thunderstorm: return "⛈️"
+        }
+    }
 }
 
 struct MoodSlider: View {

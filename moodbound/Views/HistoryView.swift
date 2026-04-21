@@ -23,7 +23,10 @@ struct HistoryView: View {
     private struct DailyAggregate: Identifiable {
         let date: Date
         let mood: Double
-        let sleep: Double
+        // sleep is optional because sleepHours == 0 is the "unknown" sentinel,
+        // and a day with no known sleep observation should not contribute to
+        // averages or render a zero-height bar in the chart.
+        let sleep: Double?
         var id: Date { date }
     }
 
@@ -168,7 +171,8 @@ struct HistoryView: View {
     private var windowSummaryCard: some View {
         let avgMood = aggregatedEntries.map(\.mood).average
         let moodVolatility = aggregatedEntries.map(\.mood).populationStdDev
-        let avgSleep = aggregatedEntries.map(\.sleep).average
+        let knownSleep = aggregatedEntries.compactMap(\.sleep)
+        let avgSleep: Double? = knownSleep.isEmpty ? nil : knownSleep.average
 
         return HStack {
             summaryMetric(
@@ -185,7 +189,7 @@ struct HistoryView: View {
             Spacer()
             summaryMetric(
                 title: "Avg Sleep",
-                value: String(format: "%.1fh", avgSleep),
+                value: avgSleep.map { String(format: "%.1fh", $0) } ?? "—",
                 tint: .indigo
             )
         }
@@ -214,7 +218,11 @@ struct HistoryView: View {
         case .quarter:
             days = 90
         }
-        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: appNow)!
+        // Anchor to startOfDay so entries from the morning of the boundary
+        // day are included regardless of the current wall-clock time.
+        let calendar = Calendar.current
+        let startToday = calendar.startOfDay(for: appNow)
+        let cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: startToday) ?? startToday
         return entries.filter { $0.timestamp >= cutoff }
     }
 
@@ -225,7 +233,11 @@ struct HistoryView: View {
 
         return grouped.map { date, bucket in
             let moodAverage = bucket.reduce(0.0) { $0 + Double($1.moodLevel) } / Double(bucket.count)
-            let sleepAverage = bucket.reduce(0.0) { $0 + $1.sleepHours } / Double(bucket.count)
+            // sleepHours == 0 means "unknown" — a user logged everything except
+            // their sleep that day. Average only over known values; if every
+            // entry that day was unknown, the day has no sleep aggregate.
+            let knownSleep = bucket.map(\.sleepHours).filter { $0 > 0 }
+            let sleepAverage: Double? = knownSleep.isEmpty ? nil : knownSleep.reduce(0, +) / Double(knownSleep.count)
             return DailyAggregate(date: date, mood: moodAverage, sleep: sleepAverage)
         }
         .sorted { $0.date < $1.date }
@@ -370,17 +382,21 @@ struct HistoryView: View {
             Text("Sleep Pattern")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
 
-            Chart(aggregatedEntries) { point in
-                BarMark(
-                    x: .value("Date", point.date, unit: .day),
-                    y: .value("Hours", point.sleep)
-                )
-                .foregroundStyle(
-                    point.sleep < 6 || point.sleep > 10
-                    ? MoodboundDesign.accent.opacity(0.68)
-                    : MoodboundDesign.tint.opacity(0.72)
-                )
-                .cornerRadius(4)
+            Chart {
+                ForEach(aggregatedEntries) { point in
+                    if let sleep = point.sleep {
+                        BarMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Hours", sleep)
+                        )
+                        .foregroundStyle(
+                            sleep < 6 || sleep > 10
+                            ? MoodboundDesign.accent.opacity(0.68)
+                            : MoodboundDesign.tint.opacity(0.72)
+                        )
+                        .cornerRadius(4)
+                    }
+                }
 
                 RuleMark(y: .value("Target", 8))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))

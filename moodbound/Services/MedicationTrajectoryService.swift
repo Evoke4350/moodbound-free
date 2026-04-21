@@ -45,7 +45,7 @@ enum MedicationTrajectoryService {
         }
 
         let names = Set(groupedTakenShort.keys).union(groupedMissedShort.keys)
-        return names.compactMap { name in
+        return names.compactMap { name -> MedicationTrajectory? in
             let takenShort = groupedTakenShort[name] ?? []
             let missedShort = groupedMissedShort[name] ?? []
             let takenMedium = groupedTakenMedium[name] ?? []
@@ -53,8 +53,16 @@ enum MedicationTrajectoryService {
 
             let support = min(takenShort.count, missedShort.count)
             let sufficient = support >= minimumSamples
-            let shortDelta = average(takenShort) - average(missedShort)
-            let mediumDelta = average(takenMedium) - average(missedMedium)
+            // Both arms must have at least one observation before we can
+            // produce a delta; otherwise average([])==0 would silently masquerade
+            // as a real risk score and the difference would be meaningless.
+            guard let takenShortAvg = mean(takenShort),
+                  let missedShortAvg = mean(missedShort) else { return nil }
+            let shortDelta = takenShortAvg - missedShortAvg
+            let mediumDelta: Double = {
+                guard let t = mean(takenMedium), let m = mean(missedMedium) else { return shortDelta }
+                return t - m
+            }()
             let spread = standardDeviation(takenShort + missedShort + takenMedium + missedMedium)
             let uncertainty = max(0.05, min(1.0, spread / sqrt(Double(max(1, support)))))
 
@@ -93,24 +101,24 @@ enum MedicationTrajectoryService {
         sorted: [MoodEntry],
         riskByEntryId: [ObjectIdentifier: Double]
     ) -> Double? {
-        guard index + 1 < sorted.count else { return nil }
+        let start = index + 1
+        guard start < sorted.count, count > 0 else { return nil }
         let upperBound = min(sorted.count - 1, index + count)
-        let future = sorted[(index + 1)...upperBound]
+        guard upperBound >= start else { return nil }
+        let future = sorted[start...upperBound]
         let values = future.compactMap { riskByEntryId[ObjectIdentifier($0)] }
-        guard !values.isEmpty else { return nil }
-        return average(values)
+        return mean(values)
     }
 
-    private static func average(_ values: [Double]) -> Double {
-        guard !values.isEmpty else { return 0 }
+    private static func mean(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
         return values.reduce(0, +) / Double(values.count)
     }
 
     private static func standardDeviation(_ values: [Double]) -> Double {
-        guard values.count > 1 else { return 0 }
-        let mean = average(values)
+        guard values.count > 1, let m = mean(values) else { return 0 }
         let variance = values.reduce(0) { partial, value in
-            let delta = value - mean
+            let delta = value - m
             return partial + (delta * delta)
         } / Double(values.count - 1)
         return sqrt(variance)

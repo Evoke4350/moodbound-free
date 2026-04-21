@@ -20,7 +20,11 @@ struct HomeView: View {
                         phaseNudgeCard(snapshot: snapshot)
                     }
                     quickAction
-                    statsGrid
+                    if entries.count < 3 {
+                        baselineCard
+                    } else {
+                        statsGrid
+                    }
                     recentSection
                 }
                 .padding(.horizontal, horizontalSizeClass == .regular ? 24 : 16)
@@ -228,6 +232,28 @@ struct HomeView: View {
         }
     }
 
+    private var baselineCard: some View {
+        let logged = min(entries.count, 3)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(MoodboundDesign.tint)
+                Text("Building your baseline")
+                    .font(.headline)
+            }
+            Text("\(logged) / 3 entries logged. Insights unlock once you've logged 3.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            ProgressView(value: Double(logged), total: 3)
+                .tint(MoodboundDesign.tint)
+            Text("Log once a day for the most useful patterns.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .moodCard()
+    }
+
     private var statsGrid: some View {
         let columns = horizontalSizeClass == .regular
             ? [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
@@ -325,16 +351,18 @@ struct HomeView: View {
     }
 
     private var weekSleepText: String {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: appNow) ?? appNow
-        let recent = entries.filter { $0.timestamp >= cutoff }
-        guard !recent.isEmpty else { return "No data" }
-        let avg = recent.reduce(0.0) { $0 + $1.sleepHours } / Double(recent.count)
+        // sleepHours == 0 is the "unknown" sentinel; including it would
+        // crater the average. Skip those entries when averaging.
+        let knownSleep = viewModel.entriesWithinDays(entries: entries, days: 7, now: appNow)
+            .map(\.sleepHours)
+            .filter { $0 > 0 }
+        guard !knownSleep.isEmpty else { return "No data" }
+        let avg = knownSleep.reduce(0.0, +) / Double(knownSleep.count)
         return String(format: "%.1f h", avg)
     }
 
     private func entriesInLastDays(_ days: Int) -> Int {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: appNow) ?? appNow
-        return entries.filter { $0.timestamp >= cutoff }.count
+        viewModel.entriesWithinDays(entries: entries, days: days, now: appNow).count
     }
 
     private var insightSnapshot: InsightSnapshot? {
@@ -371,10 +399,13 @@ struct HomeView: View {
     }
 
     private func outlookSummary(snapshot: InsightSnapshot, score: Double) -> String {
-        if score >= 70 {
+        // Thresholds intentionally aligned with outlookBand so a single score
+        // can't be labeled "Rough patch" by the badge while the supporting
+        // summary line says it's only "bumpy".
+        if score >= 75 {
             return L10n.tr("outlook.summary.rough")
         }
-        if score >= 40 {
+        if score >= 45 {
             return L10n.tr("outlook.summary.bumpy")
         }
         if snapshot.lowSleepCount14d > 0 {

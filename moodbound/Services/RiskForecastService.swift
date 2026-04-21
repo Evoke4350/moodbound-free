@@ -28,7 +28,11 @@ enum RiskForecastService {
         let depressivePosterior = average(latent.posteriors.suffix(14).map { $0.distribution.depressive })
         let lowSleepRate = fraction(recent.map { $0.sleepHours < 6.0 })
         let highVolatilityRate = fraction(recent.map { ($0.volatility7d ?? 0) >= 1.1 })
-        let recentChangeRate = min(1.0, Double(changePoints.count) / max(1.0, Double(recent.count / 3)))
+        // Bug fix: previously `recent.count / 3` was integer division, so
+        // counts of 1 and 2 collapsed to 0 (then clamped to 1.0 by max), and
+        // counts of 4 and 5 both became 1 — flattening the rate scale at the
+        // low end. Use Double division so the denominator scales smoothly.
+        let recentChangeRate = min(1.0, Double(changePoints.count) / max(1.0, Double(recent.count) / 3.0))
 
         let linearScore =
             (1.2 * elevatedPosterior) +

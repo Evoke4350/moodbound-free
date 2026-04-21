@@ -28,7 +28,14 @@ enum ModelHealthService {
         }
 
         let drift = driftScore(vectors: sorted)
-        let staleDays = max(0, Calendar.current.dateComponents([.day], from: latest.timestamp, to: now).day ?? 0)
+        // Compare calendar day boundaries, not raw 24-hour deltas. With the
+        // raw delta, an entry logged yesterday at 8pm against a "now" of 6am
+        // today reads as 0 days stale even though the user clearly missed a
+        // day; with calendar boundaries it correctly reads as 1.
+        let calendar = Calendar.current
+        let latestDay = calendar.startOfDay(for: latest.timestamp)
+        let nowDay = calendar.startOfDay(for: now)
+        let staleDays = max(0, calendar.dateComponents([.day], from: latestDay, to: nowDay).day ?? 0)
         var alerts: [String] = []
 
         if drift >= 0.45 {
