@@ -2,7 +2,9 @@
 
 Mood tracking built for bipolar disorder. Reads your body through Apple Health, detects pattern shifts with Bayesian models, warns you when something is changing.
 
-On-device. Open source. [$2.99 on the App Store.](https://apps.apple.com/app/moodbound)
+On-device. Open source. [Free on the App Store.](https://apps.apple.com/us/app/moodbound/id6752506815)
+
+Learn more at [moodbound.app](https://moodbound.app). Site source: [Evoke4350/moodbound.app](https://github.com/Evoke4350/moodbound.app).
 
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange) ![iOS](https://img.shields.io/badge/iOS-17.0%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![HealthKit](https://img.shields.io/badge/HealthKit-Integrated-red)
 
@@ -103,4 +105,4 @@ The source code is public. Read it.
 
 MIT. See [LICENSE](LICENSE).
 
-Open source code, $2.99 on the App Store. You pay for the signed build, the updates, and not having to compile it yourself.
+Free on the App Store, or build from source. Both are fully MIT-licensed.
