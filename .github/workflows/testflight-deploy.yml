@@ -28,10 +28,16 @@ jobs:
       - name: Decode ASC API key
         env:
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
           mkdir -p "$RUNNER_TEMP/secrets"
           printf '%s' "$ASC_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/secrets/AuthKey.p8"
           chmod 600 "$RUNNER_TEMP/secrets/AuthKey.p8"
+          # altool --apiKey scans well-known dirs by key id; xcodebuild
+          # accepts an explicit -authenticationKeyPath. Stage both.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          cp "$RUNNER_TEMP/secrets/AuthKey.p8" "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
 
       - name: Set build number
         # github.run_number is monotonic per-workflow. Manual uploads already
@@ -95,4 +101,6 @@ jobs:
 
       - name: Cleanup secrets
         if: always()
-        run: rm -rf "$RUNNER_TEMP/secrets"
+        run: |
+          rm -rf "$RUNNER_TEMP/secrets"
+          rm -rf "$HOME/.appstoreconnect/private_keys"
