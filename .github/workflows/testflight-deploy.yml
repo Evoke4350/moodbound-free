@@ -10,6 +10,9 @@ concurrency:
   group: testflight-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: macos-15
@@ -22,59 +25,23 @@ jobs:
       - name: Install Tuist
         run: brew install tuist
 
-      # --- Decode secrets into temp files ---
-
       - name: Decode ASC API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
         run: |
           mkdir -p "$RUNNER_TEMP/secrets"
-          echo "${{ secrets.ASC_PRIVATE_KEY }}" | base64 --decode > "$RUNNER_TEMP/secrets/AuthKey.p8"
+          printf '%s' "$ASC_PRIVATE_KEY" | base64 --decode > "$RUNNER_TEMP/secrets/AuthKey.p8"
           chmod 600 "$RUNNER_TEMP/secrets/AuthKey.p8"
 
-      - name: Decode distribution certificate
-        run: |
-          echo "${{ secrets.DIST_CERT_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/secrets/dist.p12"
-
-      # --- Set up temporary keychain ---
-
-      - name: Create keychain and import certificate
-        env:
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
-        run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-
-          # Create a new keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Append it to the search list and make it default
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-          security default-keychain -s "$KEYCHAIN_PATH"
-
-          # Unlock and prevent auto-lock during the build
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 1800 "$KEYCHAIN_PATH"
-
-          # Import the distribution certificate
-          security import "$RUNNER_TEMP/secrets/dist.p12" \
-            -k "$KEYCHAIN_PATH" \
-            -P "$DIST_CERT_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security
-
-          # Allow codesign to access the keychain without prompting
-          security set-key-partition-list -S "apple-tool:,apple:,codesign:" \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-      # --- Build number ---
-
       - name: Set build number
+        # github.run_number is monotonic per-workflow. Manual uploads already
+        # used 1.2.1 builds 17–20; offset keeps CI builds safely above that
+        # so TestFlight never rejects a duplicate.
         run: |
-          NEW_BUILD=${{ github.run_number }}
+          NEW_BUILD=$(( ${{ github.run_number }} + 20 ))
           echo "BUILD_NUMBER=$NEW_BUILD" >> "$GITHUB_ENV"
           sed -i '' "s/\"CFBundleVersion\": *\.string(\"[0-9]*\")/\"CFBundleVersion\": .string(\"$NEW_BUILD\")/" Project.swift
           echo "Build number: $NEW_BUILD"
-
-      # --- Generate, archive, export, upload ---
 
       - name: Generate project
         run: tuist generate --no-open --path .
@@ -126,12 +93,6 @@ jobs:
             --apiIssuer "$ASC_ISSUER_ID"
           echo "Upload complete. Build $BUILD_NUMBER submitted to TestFlight."
 
-      # --- Cleanup (always runs, even on failure) ---
-
-      - name: Cleanup secrets and keychain
+      - name: Cleanup secrets
         if: always()
-        run: |
-          # Delete temp keychain
-          security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
-          # Remove secret files
-          rm -rf "$RUNNER_TEMP/secrets"
+        run: rm -rf "$RUNNER_TEMP/secrets"
