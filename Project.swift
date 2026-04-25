@@ -12,7 +12,7 @@ let project = Project(
             deploymentTargets: .iOS("17.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleShortVersionString": .string("1.2.1"),
-                "CFBundleVersion": .string("17"),
+                "CFBundleVersion": .string("20"),
                 "CFBundleIconName": .string("AppIcon"),
                 "UILaunchScreen": .dictionary([:]),
                 "UISupportedInterfaceOrientations": .array([

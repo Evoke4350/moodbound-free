@@ -14,8 +14,13 @@ enum MedicationTrajectoryService {
         let sorted = entries.sorted { $0.timestamp < $1.timestamp }
         guard sorted.count >= 6 else { return [] }
 
-        let riskByEntryId = Dictionary(uniqueKeysWithValues: sorted.map { (ObjectIdentifier($0), riskScore($0)) })
-        let indexByEntryId = Dictionary(uniqueKeysWithValues: sorted.enumerated().map { (ObjectIdentifier($0.element), $0.offset) })
+        // ObjectIdentifier collides when the same MoodEntry instance appears
+        // twice (e.g., post-save in NewEntryView prepends the new entry to a
+        // @Query result that has already refreshed to include it). Use the
+        // non-trapping init and keep the first occurrence so duplicates can't
+        // crash here.
+        let riskByEntryId = Dictionary(sorted.map { (ObjectIdentifier($0), riskScore($0)) }, uniquingKeysWith: { first, _ in first })
+        let indexByEntryId = Dictionary(sorted.enumerated().map { (ObjectIdentifier($0.element), $0.offset) }, uniquingKeysWith: { first, _ in first })
 
         var groupedTakenShort: [String: [Double]] = [:]
         var groupedMissedShort: [String: [Double]] = [:]

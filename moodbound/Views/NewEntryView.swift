@@ -1050,10 +1050,14 @@ struct NewEntryView: View {
     private func buildSavedFeedback(including newEntry: MoodEntry) -> SavedFeedback {
         let vm = MoodViewModel()
         let now = AppClock.now
-        // recentEntries is a @Query that won't refresh until the next view
-        // update cycle, so it doesn't include the entry we just saved.
-        // Prepend it manually so streak and outlook reflect the new entry.
-        let allEntries = [newEntry] + recentEntries
+        // @Query refresh timing post-save varies by iOS version: pre-iOS 18
+        // recentEntries doesn't include newEntry yet; on iOS 18+/26 it can
+        // already be present. Always include newEntry, then dedupe by
+        // persistent identity so trajectory services that key off
+        // ObjectIdentifier don't see the same instance twice.
+        var allEntries = [newEntry] + recentEntries
+        var seen = Set<ObjectIdentifier>()
+        allEntries = allEntries.filter { seen.insert(ObjectIdentifier($0)).inserted }
         let streak = vm.streakDays(entries: allEntries, now: now)
 
         // Compute a lightweight outlook if we have enough data.
