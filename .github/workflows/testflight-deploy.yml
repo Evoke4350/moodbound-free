@@ -22,6 +22,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Select latest Xcode
+        # Apple periodically retires older Xcode versions for App Store
+        # submissions; pin to whatever stable Xcode the runner image has
+        # installed so we automatically follow Apple's floor without
+        # manual workflow edits each cycle.
+        run: |
+          LATEST=$(ls -1 /Applications | grep -E '^Xcode_[0-9]+(\.[0-9]+)*\.app$' | sort -V | tail -1)
+          echo "Selecting $LATEST"
+          sudo xcode-select -s "/Applications/$LATEST/Contents/Developer"
+          xcodebuild -version
+
       - name: Install Tuist
         run: brew install tuist
 
