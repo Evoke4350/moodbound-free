@@ -128,7 +128,16 @@ enum ClinicianReportService {
                 let imageRenderer = ImageRenderer(content: AnyView(page.frame(width: pageSize.width, height: pageSize.height)))
                 imageRenderer.proposedSize = .init(pageSize)
                 imageRenderer.render { _, drawAction in
-                    drawAction(ctx.cgContext)
+                    // UIGraphicsPDFRenderer's CG context uses UIKit-flipped
+                    // coordinates (origin top-left). ImageRenderer.render
+                    // expects a CG-native context (origin bottom-left). Without
+                    // this flip the page renders upside-down and mirrored.
+                    let cg = ctx.cgContext
+                    cg.saveGState()
+                    cg.translateBy(x: 0, y: pageSize.height)
+                    cg.scaleBy(x: 1, y: -1)
+                    drawAction(cg)
+                    cg.restoreGState()
                 }
             }
         }
