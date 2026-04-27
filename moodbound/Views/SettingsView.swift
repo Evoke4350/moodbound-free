@@ -56,7 +56,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Apple Health")
                     } footer: {
-                        Text("Sleep auto-fills last night's hours. Full integration reads heart rate, HRV, steps, and mindful minutes — and writes your mood back to Apple Health.")
+                        Text("Sleep auto-fills last night's hours. Full integration reads heart rate, HRV, steps, and mindful minutes, and writes your mood back to Apple Health.\n\nOura, Whoop, and similar wearables: enable Apple Health sync in their app to feed Moodbound automatically.")
                     }
                 }
 
