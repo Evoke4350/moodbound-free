@@ -95,11 +95,28 @@ enum HealthKitService {
             )
             let samples = try await descriptor.result(for: store)
 
-            let totalSeconds = samples
+            // Union the asleep intervals so overlapping samples don't get
+            // counted twice. Apple Watch writes Core/REM/Deep stages, and
+            // 3rd-party apps (AutoSleep, Pillow, older watchOS) often write
+            // asleepUnspecified across the same window — naive summing
+            // produced totals ~2x the user's actual sleep.
+            let asleepIntervals = samples
                 .filter { asleepValues.contains($0.value) }
-                .reduce(0.0) { sum, sample in
-                    sum + sample.endDate.timeIntervalSince(sample.startDate)
+                .map { ($0.startDate, $0.endDate) }
+                .sorted { $0.0 < $1.0 }
+
+            var merged: [(Date, Date)] = []
+            for interval in asleepIntervals {
+                if let last = merged.last, interval.0 <= last.1 {
+                    merged[merged.count - 1] = (last.0, max(last.1, interval.1))
+                } else {
+                    merged.append(interval)
                 }
+            }
+
+            let totalSeconds = merged.reduce(0.0) { sum, interval in
+                sum + interval.1.timeIntervalSince(interval.0)
+            }
 
             guard totalSeconds > 0 else { return nil }
             let hours = totalSeconds / 3600.0
