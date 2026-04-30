@@ -60,25 +60,32 @@ enum HealthKitService {
 
     /// Fetches total sleep hours for the most recent night.
     ///
-    /// Queries `sleepAnalysis` samples from 6 PM yesterday to noon today.
-    /// Only counts actual sleep stages — ignores `inBed` and `awake`.
-    static func fetchLastNightSleepHours() async -> Double? {
+    /// Window: 6 PM yesterday → 2 PM today. End extended past noon so late
+    /// risers / shift workers still register. Counts only `asleep*` stages
+    /// (ignores `inBed` and `awake`), unions overlapping intervals so
+    /// multi-source data (Watch + 3rd-party) doesn't double-count, and
+    /// clips to the window so a sample whose `startDate` falls before
+    /// the window edge still contributes its in-window portion.
+    static func fetchLastNightSleepHours(referenceDate: Date = Date()) async -> Double? {
         guard isAvailable else { return nil }
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             return nil
         }
 
         let calendar = Calendar.current
-        let now = Date()
-        let todayNoon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: now) ?? now
-        guard let yesterdayEvening = calendar.date(byAdding: .hour, value: -18, to: todayNoon) else {
+        let windowEnd = calendar.date(bySettingHour: 14, minute: 0, second: 0, of: referenceDate) ?? referenceDate
+        guard let windowStart = calendar.date(byAdding: .hour, value: -20, to: windowEnd) else {
             return nil
         }
 
+        // No `.strictStartDate` — that flag excludes samples whose `startDate`
+        // is before the window even when the bulk of the sample lies inside
+        // it (e.g. user fell asleep at 5:50 PM and woke at 6 AM). Default
+        // overlap matching plus per-interval clipping below is the correct
+        // behavior.
         let predicate = HKQuery.predicateForSamples(
-            withStart: yesterdayEvening,
-            end: todayNoon,
-            options: .strictStartDate
+            withStart: windowStart,
+            end: windowEnd
         )
 
         let asleepValues: Set<Int> = [
@@ -95,14 +102,17 @@ enum HealthKitService {
             )
             let samples = try await descriptor.result(for: store)
 
-            // Union the asleep intervals so overlapping samples don't get
-            // counted twice. Apple Watch writes Core/REM/Deep stages, and
-            // 3rd-party apps (AutoSleep, Pillow, older watchOS) often write
-            // asleepUnspecified across the same window — naive summing
-            // produced totals ~2x the user's actual sleep.
-            let asleepIntervals = samples
+            // Clip each asleep sample to the window so partial-overlap
+            // samples contribute only the in-window portion, then union the
+            // intervals so Watch core/REM/deep + 3rd-party asleepUnspecified
+            // don't double-count.
+            let asleepIntervals: [(Date, Date)] = samples
                 .filter { asleepValues.contains($0.value) }
-                .map { ($0.startDate, $0.endDate) }
+                .compactMap { sample in
+                    let start = max(sample.startDate, windowStart)
+                    let end = min(sample.endDate, windowEnd)
+                    return end > start ? (start, end) : nil
+                }
                 .sorted { $0.0 < $1.0 }
 
             var merged: [(Date, Date)] = []
@@ -126,6 +136,17 @@ enum HealthKitService {
             AppLogger.error("HealthKit sleep query failed", error: error)
             return nil
         }
+    }
+
+    /// Fetches sleep hours for a specific past night, anchored on the
+    /// "morning of" the given calendar date. Window: 6 PM the day before
+    /// `morningOf` → 2 PM `morningOf`. Used by the missed-day backfill UI
+    /// so users can pull sleep values for days they forgot to log.
+    static func fetchSleepHours(morningOf date: Date) async -> Double? {
+        guard isAvailable else { return nil }
+        let calendar = Calendar.current
+        let noon = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
+        return await fetchLastNightSleepHours(referenceDate: noon)
     }
 
     // MARK: - Read: Heart Rate

@@ -17,6 +17,10 @@ struct SettingsView: View {
     @State private var showingSuccess = false
     @State private var successMessage = ""
     @State private var showingReport = false
+#if DEBUG
+    @State private var seeding = false
+    @State private var seededCount: Int?
+#endif
 
     var body: some View {
         NavigationStack {
@@ -89,6 +93,30 @@ struct SettingsView: View {
                 } footer: {
                     Text("Export saves all entries, medications, triggers, safety plan, and settings as a JSON file. Import replaces all existing data.")
                 }
+
+#if DEBUG
+                Section {
+                    Button {
+                        Task { await seedNinetyDays() }
+                    } label: {
+                        HStack {
+                            if seeding { ProgressView().padding(.trailing, 4) }
+                            Label(seeding ? "Seeding…" : "Seed 90 days of test data", systemImage: "wand.and.stars")
+                        }
+                    }
+                    .disabled(seeding)
+                    .accessibilityIdentifier("debug-seed-90-days")
+                    if let seededCount {
+                        Text("Inserted \(seededCount) entries.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Developer")
+                } footer: {
+                    Text("Inserts realistic mood data only for days that don't already have an entry. Safe to run multiple times.")
+                }
+#endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -154,6 +182,25 @@ struct SettingsView: View {
             showingError = true
         }
     }
+
+#if DEBUG
+    private func seedNinetyDays() async {
+        seeding = true
+        defer { seeding = false }
+        do {
+            let inserted = try SampleDataService.insertMissingDailyEntries(
+                days: 90,
+                context: modelContext
+            )
+            seededCount = inserted
+            successMessage = "Seeded \(inserted) day(s) of test data."
+            showingSuccess = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+#endif
 
     private func importData(result: Result<URL, Error>) {
         switch result {

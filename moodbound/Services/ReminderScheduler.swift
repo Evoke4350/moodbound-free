@@ -14,11 +14,13 @@ enum ReminderSchedulerError: LocalizedError {
 
 enum ReminderScheduler {
     static let requestIdentifier = "moodbound.daily.checkin.reminder"
+    static let requestIdentifierPrefix = "moodbound.daily.checkin.reminder"
 
     static func sync(with settings: ReminderSettings) async throws {
         let center = UNUserNotificationCenter.current()
+        await clearAll(center: center)
+
         if !settings.enabled {
-            center.removePendingNotificationRequests(withIdentifiers: [requestIdentifier])
             return
         }
 
@@ -27,24 +29,46 @@ enum ReminderScheduler {
             throw ReminderSchedulerError.notificationsDenied
         }
 
-        let content = UNMutableNotificationContent()
-        content.title = L10n.tr("reminder.title")
-        content.body = settings.message
-        content.sound = .default
+        let times = settings.allTimes
+        guard !times.isEmpty else { return }
 
-        var dateComponents = DateComponents()
-        dateComponents.hour = settings.hour
-        dateComponents.minute = settings.minute
+        for (index, time) in times.enumerated() {
+            let content = UNMutableNotificationContent()
+            content.title = L10n.tr("reminder.title")
+            content.body = settings.message
+            content.sound = .default
 
-        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
-        let request = UNNotificationRequest(
-            identifier: requestIdentifier,
-            content: content,
-            trigger: trigger
-        )
+            var dateComponents = DateComponents()
+            dateComponents.hour = time.hour
+            dateComponents.minute = time.minute
 
-        center.removePendingNotificationRequests(withIdentifiers: [requestIdentifier])
-        try await center.add(request)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+            // Slot 0 keeps the legacy identifier so existing pending requests
+            // get cleanly replaced; slots 1..n use suffixed identifiers.
+            let identifier = index == 0
+                ? requestIdentifier
+                : "\(requestIdentifierPrefix).\(index)"
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: trigger
+            )
+            try await center.add(request)
+        }
+    }
+
+    /// Removes any pending check-in reminder, including legacy single-slot
+    /// and multi-slot identifiers from prior builds. Best-effort: a stale
+    /// identifier we never recorded is harmless and gets cleared by iOS
+    /// when re-installed.
+    static func clearAll(center: UNUserNotificationCenter = .current()) async {
+        let pending = await center.pendingNotificationRequests()
+        let ids = pending
+            .map(\.identifier)
+            .filter { $0 == requestIdentifier || $0.hasPrefix("\(requestIdentifierPrefix).") }
+        if !ids.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+        }
     }
 
     private static func requestAuthorizationIfNeeded(center: UNUserNotificationCenter) async throws -> Bool {

@@ -7,6 +7,8 @@ struct HomeView: View {
     @State private var showingNewEntry = false
     @State private var showingSettings = false
     @State private var showingSafetyPlan = false
+    @State private var showingBackfill = false
+    @State private var dismissedBackfillRecommendation: MissedDayDetector.Recommendation?
     @State private var viewModel = MoodViewModel()
     @AppStorage(AppClock.overrideTimestampKey) private var overrideTimestamp: Double = 0
 
@@ -18,6 +20,9 @@ struct HomeView: View {
                     if let snapshot = insightSnapshot {
                         todayOutlookCard(snapshot: snapshot)
                         phaseNudgeCard(snapshot: snapshot)
+                    }
+                    if let recommendation = visibleBackfillRecommendation {
+                        backfillCard(recommendation: recommendation)
                     }
                     quickAction
                     if entries.count < 3 {
@@ -62,8 +67,82 @@ struct HomeView: View {
             .sheet(isPresented: $showingSafetyPlan) {
                 SafetyPlanView()
             }
+            .sheet(isPresented: $showingBackfill) {
+                if let rec = visibleBackfillRecommendation {
+                    BackfillSheet(recommendation: rec)
+                }
+            }
         }
         .animation(.smooth(duration: 0.28), value: entries.count)
+    }
+
+    @ViewBuilder
+    private func backfillCard(recommendation: MissedDayDetector.Recommendation) -> some View {
+        let title: String
+        let body: String
+        let icon: String
+        let tint: Color
+        switch recommendation {
+        case .backfill(let days):
+            let count = days.count
+            title = count == 1 ? "Catch up on yesterday" : "Catch up on \(count) days"
+            body = "Quick batch entry — fill in the basics for the days you missed."
+            icon = "calendar.badge.plus"
+            tint = MoodboundDesign.tint
+        case .offerReminders(let count):
+            title = "It's been \(count) days"
+            body = "A short daily nudge keeps the data useful. Want to set one up?"
+            icon = "bell.badge"
+            tint = .orange
+        case .noGap:
+            return AnyView(EmptyView())
+        }
+        return AnyView(
+            Button {
+                showingBackfill = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title3)
+                        .foregroundStyle(tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.primary)
+                        Text(body)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        dismissedBackfillRecommendation = recommendation
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .moodCard()
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("backfill-card-button")
+        )
+    }
+
+    private var backfillRecommendation: MissedDayDetector.Recommendation {
+        MissedDayDetector.recommend(entries: entries, now: appNow)
+    }
+
+    private var visibleBackfillRecommendation: MissedDayDetector.Recommendation? {
+        let recommendation = backfillRecommendation
+        if case .noGap = recommendation { return nil }
+        // First-run users (no entries yet) get the empty-state CTA, not a
+        // catch-up nudge — there's nothing to "miss" if you've never logged.
+        if entries.isEmpty { return nil }
+        if dismissedBackfillRecommendation == recommendation { return nil }
+        return recommendation
     }
 
     private var greetingCard: some View {

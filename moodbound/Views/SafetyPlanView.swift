@@ -101,13 +101,28 @@ struct SafetyPlanView: View {
                     .accessibilityIdentifier("add-contact-button")
                 }
 
-                Section("Daily Reminder") {
+                Section {
                     Toggle("Enable Daily Check-In Reminder", isOn: $reminderEnabled)
                         .accessibilityIdentifier("enable-reminder-toggle")
                     DatePicker("Reminder Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
                         .disabled(!reminderEnabled)
                     TextField("Reminder message", text: $reminderMessage)
                         .disabled(!reminderEnabled)
+                    if let extras = extraReminderTimesText {
+                        HStack {
+                            Label("Extra times", systemImage: "clock.badge")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(extras)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Daily Reminder")
+                } footer: {
+                    Text("Need more than one nudge per day? After missing a few entries the home screen will offer to add extra times.")
+                        .font(.caption)
                 }
             }
             .navigationTitle("Safety Plan")
@@ -179,6 +194,25 @@ struct SafetyPlanView: View {
             errorMessage = error.localizedDescription
             showingError = true
         }
+    }
+
+    private var extraReminderTimesText: String? {
+        guard let existing = reminderSettings.first, !existing.additionalMinutes.isEmpty else { return nil }
+        let calendar = Calendar.current
+        let now = Date()
+        let formatter = DateFormatter()
+        formatter.dateFormat = nil
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        let formatted = existing.additionalMinutes
+            .sorted()
+            .compactMap { minutes -> String? in
+                let h = minutes / 60
+                let m = minutes % 60
+                guard let date = calendar.date(bySettingHour: h, minute: m, second: 0, of: now) else { return nil }
+                return formatter.string(from: date)
+            }
+        return formatted.joined(separator: ", ")
     }
 
     private func loadReminderSettingsIfNeeded() {
