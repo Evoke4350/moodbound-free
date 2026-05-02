@@ -7,6 +7,8 @@
 - New entry save action: <= 120ms p95 local persistence.
 - History chart render: <= 250ms with 365 entries.
 - Insights snapshot computation: <= 40ms for 365 entries.
+- Life chart service build: <= 50ms for 365 entries.
+- Life chart canvas render: <= 200ms for 365 days.
 
 ## Measurement Commands
 
@@ -24,6 +26,9 @@
 - Automated perf tests (`PerformanceBudgetTests`) on iPhone 16 simulator:
   - Feature materialization for 365 entries: ~84ms average.
   - Risk forecast over 365-entry vectors: ~3ms average.
+- Automated perf tests (`LifeChartRenderTests`) on iPhone 17 Pro simulator:
+  - Life chart service build for 365 entries: ~2.4ms average.
+  - Life chart canvas render for 365 days: ~0.18ms average.
 
 ## Next Required Pass
 

@@ -89,11 +89,53 @@ struct LifeChartView: View {
                 .frame(width: containerWidth, height: Self.chartHeight)
                 .contentShape(Rectangle())
                 .gesture(tapGesture(data: data, barWidth: barWidth))
+                .accessibilityRepresentation { perDayAccessibilityList(data: data) }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel(data: data))
         }
         .moodCard()
+    }
+
+    /// VoiceOver representation: invisible list of per-day elements so
+    /// users hear "Day X, severity band, pole, N entries, annotation"
+    /// instead of the Canvas appearing as one opaque blob. This was
+    /// called out as an issue #9 acceptance criterion.
+    @ViewBuilder
+    private func perDayAccessibilityList(data: LifeChartData) -> some View {
+        let annotationsByDay = Dictionary(grouping: data.annotations, by: \.day)
+        VStack(spacing: 0) {
+            Text(accessibilityLabel(data: data))
+            ForEach(data.bars, id: \.day) { bar in
+                Text(perDayAccessibilityCopy(
+                    bar: bar,
+                    annotations: annotationsByDay[bar.day] ?? []
+                ))
+            }
+        }
+    }
+
+    private func perDayAccessibilityCopy(
+        bar: LifeChartDayBar,
+        annotations: [LifeChartAnnotation]
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        let dayString = formatter.string(from: bar.day)
+        var parts = [dayString]
+        if let band = bar.band {
+            parts.append(band.label)
+            parts.append("\(bar.entryCount) \(bar.entryCount == 1 ? "entry" : "entries")")
+        } else {
+            parts.append("no entry")
+        }
+        if bar.isMixedFeatures { parts.append("mixed features") }
+        for annotation in annotations {
+            switch annotation {
+            case .medicationStarted(let name, _): parts.append("started \(name)")
+            case .medicationStopped(let name, _): parts.append("stopped \(name)")
+            case .highIntensityTrigger(let name, _, _): parts.append("trigger: \(name)")
+            }
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func chartCanvas(data: LifeChartData, barWidth: CGFloat, width: CGFloat) -> some View {
