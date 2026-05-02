@@ -151,11 +151,20 @@ enum InsightEngine {
         entries: [MoodEntry],
         calendar: Calendar = .current
     ) -> Int {
+        mixedFeatureDays(entries: entries, calendar: calendar).count
+    }
+
+    /// The set of calendar days flagged as mixed-features. Used by
+    /// `LifeChartService` to render a per-day mixed marker on the chart.
+    static func mixedFeatureDays(
+        entries: [MoodEntry],
+        calendar: Calendar = .current
+    ) -> Set<Date> {
         var seenDays = Set<Date>()
         for entry in entries where isMixedFeaturePresentation(entry) {
             seenDays.insert(calendar.startOfDay(for: entry.timestamp))
         }
-        return seenDays.count
+        return seenDays
     }
 
     private static func isMixedFeaturePresentation(_ entry: MoodEntry) -> Bool {
