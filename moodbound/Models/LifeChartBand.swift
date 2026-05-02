@@ -1,9 +1,19 @@
 import Foundation
 
 /// One of the 4 NIMH-LCM-p severity bands per pole, plus euthymic.
-/// Moodbound's -3..+3 mood scale maps onto these so the chart uses the
-/// same vocabulary clinicians read in research literature and intake
-/// paperwork.
+/// The full NIMH-LCM-S/P (Leverich & Post 2002) defines 5 bands per pole —
+/// mild (±1), low-moderate (±2), high-moderate (±3), severe (±4) — keyed
+/// to the degree of functional impairment. Moodbound's -3..+3 self-rating
+/// only carries 3 bands per pole, so we collapse to 4 visible bands and
+/// drop NIMH's subsyndromal "mild" tier: a Moodbound user who picks
+/// "mild depression" is already past the subsyndromal threshold the
+/// LCM uses, so it maps to "low moderate" rather than "mild". The
+/// chart legend documents the collapse so clinicians can audit.
+///
+/// Reference: Leverich GS, Post RM. The NIMH life chart manual for
+/// recurrent affective illness: the LCM-S/P (self-version/prospective).
+/// 2002. Validation: Denicoff et al., J Affect Disord 2000
+/// (https://pubmed.ncbi.nlm.nih.gov/11097079/).
 enum LifeChartBand: Int, CaseIterable {
     case severeDepression = -4
     case moderateHighDepression = -3

@@ -4,6 +4,12 @@ import Foundation
 /// (life events, hospitalizations, dose changes) attach by adding a
 /// new conformer; the chart service composes whichever providers it's
 /// handed.
+///
+/// Contract for conformers: the window passed in is day-aligned
+/// (`start == startOfDay(start)`, `end == startOfDay(start + N days)`),
+/// matching how `LifeChartService` builds the bar grid. Each emitted
+/// annotation's `day` must equal `startOfDay(eventTimestamp)` and must
+/// fall within the window so it can be placed on a bar.
 protocol LifeChartAnnotationProvider {
     func annotations(
         entries: [MoodEntry],
