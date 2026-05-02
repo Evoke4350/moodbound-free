@@ -58,6 +58,51 @@ struct SafetyPlanView: View {
                     }
                 }
 
+                Section {
+                    ForEach(crisisResources) { resource in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(resource.name)
+                                .font(.headline)
+                            Text(resource.hoursNote)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                if !resource.phone.isEmpty {
+                                    Button {
+                                        call(resource.phone)
+                                    } label: {
+                                        Label("Call", systemImage: "phone.fill")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .accessibilityIdentifier("crisis-call-\(resource.regionCode)")
+                                }
+                                if let sms = resource.sms {
+                                    Button {
+                                        text(sms)
+                                    } label: {
+                                        Label("Text", systemImage: "bubble.left.and.bubble.right.fill")
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                                if let web = resource.web {
+                                    Button {
+                                        if let url = URL(string: web) { openURL(url) }
+                                    } label: {
+                                        Label("Web", systemImage: "safari.fill")
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("Crisis lines")
+                } footer: {
+                    Text("Shown for your device region. If you're traveling or these aren't right for you, the international directory can help find local support.")
+                        .font(.caption)
+                }
+
                 Section("Support Contacts") {
                     ForEach(contacts) { contact in
                         VStack(alignment: .leading, spacing: 4) {
@@ -182,6 +227,16 @@ struct SafetyPlanView: View {
         let digits = phoneNumber.filter { $0.isNumber || $0 == "+" }
         guard let url = URL(string: "tel://\(digits)") else { return }
         openURL(url)
+    }
+
+    private func text(_ smsNumber: String) {
+        let digits = smsNumber.filter { $0.isNumber || $0 == "+" }
+        guard let url = URL(string: "sms://\(digits)") else { return }
+        openURL(url)
+    }
+
+    private var crisisResources: [CrisisResource] {
+        CrisisResources.current()
     }
 
     private func saveAndClose() {
