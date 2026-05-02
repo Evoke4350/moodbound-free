@@ -61,6 +61,11 @@ struct InsightSnapshot {
     /// irritability/anxiety. Sleep variance alone is *not* enough — that
     /// just means noisy sleep, not a mixed presentation.
     var mixedFeatureDays14d: Int
+    /// Per-day circadian feature vectors (Lim 2024 + Phillips 2017 +
+    /// Witting 1990). Wired through the snapshot so Phase 2 of issue
+    /// #10 (the Lim XGBoost surface) consumes a single source of truth
+    /// and the UI test pipeline exercises the derivation on every load.
+    var circadianFeatures: [CircadianFeatureVector]
 }
 
 enum InsightEngine {
@@ -75,6 +80,7 @@ enum InsightEngine {
         let lowSleepCount = recent14.filter { $0.sleepHours > 0 && $0.sleepHours < 6 }.count
         let highSleepCount = recent14.filter { $0.sleepHours > 10 }.count
         let mixedDays = mixedFeatureDayCount(entries: recent14)
+        let circadian = CircadianFeatureService.vectors(entries: entries)
         let features = FeatureStoreService.buildVectors(entries: entries)
         let latent = LatentStateService.inferStates(vectors: features)
         let changePoints = ChangePointService.detect(vectors: features)
@@ -139,7 +145,8 @@ enum InsightEngine {
             hotMoodDelta: weather.hotMoodDelta,
             evidenceLevel: bayesian.evidenceLevel,
             observationsLast14d: bayesian.observationsLast14d,
-            mixedFeatureDays14d: mixedDays
+            mixedFeatureDays14d: mixedDays,
+            circadianFeatures: circadian
         )
     }
 
