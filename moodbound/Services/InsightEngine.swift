@@ -55,6 +55,12 @@ struct InsightSnapshot {
     // than confident trend labels.
     var evidenceLevel: EvidenceLevel
     var observationsLast14d: Int
+    /// Days in the last 14 with DSM-5–style "mixed features" markers: a
+    /// depressive entry that also shows activation (high energy or
+    /// agitation), or an activated entry that also shows insomnia +
+    /// irritability/anxiety. Sleep variance alone is *not* enough — that
+    /// just means noisy sleep, not a mixed presentation.
+    var mixedFeatureDays14d: Int
 }
 
 enum InsightEngine {
@@ -68,6 +74,7 @@ enum InsightEngine {
         // Insights card, pattern story, conformal confidence).
         let lowSleepCount = recent14.filter { $0.sleepHours > 0 && $0.sleepHours < 6 }.count
         let highSleepCount = recent14.filter { $0.sleepHours > 10 }.count
+        let mixedDays = mixedFeatureDayCount(entries: recent14)
         let features = FeatureStoreService.buildVectors(entries: entries)
         let latent = LatentStateService.inferStates(vectors: features)
         let changePoints = ChangePointService.detect(vectors: features)
@@ -131,8 +138,36 @@ enum InsightEngine {
             rainyMoodDelta: weather.rainyMoodDelta,
             hotMoodDelta: weather.hotMoodDelta,
             evidenceLevel: bayesian.evidenceLevel,
-            observationsLast14d: bayesian.observationsLast14d
+            observationsLast14d: bayesian.observationsLast14d,
+            mixedFeatureDays14d: mixedDays
         )
+    }
+
+    /// Counts entries in `entries` that look like DSM-5 "mixed features":
+    /// either a depressive day with activation/agitation, or an activated
+    /// day with insomnia + irritability/anxiety. Multiple entries on the
+    /// same calendar day count once.
+    static func mixedFeatureDayCount(
+        entries: [MoodEntry],
+        calendar: Calendar = .current
+    ) -> Int {
+        var seenDays = Set<Date>()
+        for entry in entries where isMixedFeaturePresentation(entry) {
+            seenDays.insert(calendar.startOfDay(for: entry.timestamp))
+        }
+        return seenDays.count
+    }
+
+    private static func isMixedFeaturePresentation(_ entry: MoodEntry) -> Bool {
+        // Agitated depression: low mood + high energy or anxiety+irritability.
+        let agitatedDepression = entry.moodLevel <= -1
+            && (entry.energy >= 4 || (entry.anxiety >= 2 && entry.irritability >= 2))
+        // Dysphoric activation: elevated mood + insomnia + dysphoric markers.
+        // Require sleepHours > 0 so unknown sleep doesn't false-positive.
+        let dysphoricActivation = entry.moodLevel >= 1
+            && entry.sleepHours > 0 && entry.sleepHours < 5
+            && (entry.anxiety >= 2 || entry.irritability >= 2)
+        return agitatedDepression || dysphoricActivation
     }
 
     static func trendDescription(_ avg: Double) -> String {

@@ -532,8 +532,14 @@ struct InsightsView: View {
 
     private func coursePatternCard(snapshot: InsightSnapshot) -> some View {
         let phase = currentPhase(snapshot: snapshot)
-        let mixedRisk = mixedFeaturesRisk(snapshot: snapshot)
         let instability = instabilityIndex(snapshot: snapshot)
+        // Show "Mixed features" only when there's sustained DSM-aligned
+        // signal: at least 3 days in the last 14 with concurrent depressive
+        // + activation markers (or activated + dysphoric markers). The old
+        // mixedFeaturesRisk fired off sleep variance + change probability,
+        // which made the pill stick on for almost every active user.
+        let showMixed = snapshot.evidenceLevel != .insufficient
+            && snapshot.mixedFeatureDays14d >= 3
 
         return VStack(alignment: .leading, spacing: 12) {
             Text("Where You're At")
@@ -541,7 +547,7 @@ struct InsightsView: View {
 
             HStack(spacing: 8) {
                 phasePill(title: phase.title, color: phase.color)
-                if mixedRisk >= 0.15 {
+                if showMixed {
                     phasePill(title: "Mixed features", color: .purple)
                 }
                 if instability >= 0.3 {
@@ -1003,12 +1009,6 @@ struct InsightsView: View {
         let boundedDrift = min(1.0, snapshot.wassersteinDriftScore / 0.6)
         let boundedCI = min(1.0, snapshot.conformalCIWidth / 4.0)
         return (snapshot.bayesianChangeProbability * 0.5) + (boundedDrift * 0.3) + (boundedCI * 0.2)
-    }
-
-    private func mixedFeaturesRisk(snapshot: InsightSnapshot) -> Double {
-        let directionalBoost = snapshot.directionalProbes.first.map { min(1.0, $0.strength) } ?? 0
-        let sleepIrregularity = min(1.0, Double(snapshot.lowSleepCount14d + snapshot.highSleepCount14d) / 8.0)
-        return min(1.0, (sleepIrregularity * 0.5) + (snapshot.bayesianChangeProbability * 0.3) + (directionalBoost * 0.2))
     }
 
     private func outlookScore(snapshot: InsightSnapshot) -> Double {
