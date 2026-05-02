@@ -27,7 +27,11 @@ enum DigitalPhenotypeService {
     }
 
     private static func sleepRegularityCard(vectors: [TemporalFeatureVector]) -> DigitalPhenotypeCard {
-        let values = vectors.suffix(21).map(\.sleepHours)
+        // sleepHours == 0 is the project-wide "unknown" sentinel. FeatureStore
+        // emits it for every non-first-of-day vector, and entries with no
+        // recorded sleep also store 0. Treat both as missing rather than as
+        // genuine 0-hour nights, which would crater the regularity score.
+        let values = vectors.suffix(21).map(\.sleepHours).filter { $0 > 0 }
         let std = standardDeviation(values)
         let regularity = max(0, min(100, 100 - (std * 20)))
         let band: String
@@ -71,7 +75,13 @@ enum DigitalPhenotypeService {
 
     private static func recoveryHalfLifeCard(vectors: [TemporalFeatureVector]) -> DigitalPhenotypeCard {
         let values = Array(vectors.suffix(30))
-        let severities = values.map { abs($0.moodLevel) + (max(0, 6.5 - $0.sleepHours) / 2.0) }
+        // Skip the sleep contribution when sleep is unknown (0); otherwise
+        // every same-day duplicate vector or sleep-less entry would inflate
+        // the severity score with a phantom "you slept 0h" signal.
+        let severities = values.map { vector -> Double in
+            let sleepDeficit = vector.sleepHours > 0 ? (max(0, 6.5 - vector.sleepHours) / 2.0) : 0
+            return abs(vector.moodLevel) + sleepDeficit
+        }
         guard let peak = severities.enumerated().max(by: { $0.element < $1.element }), peak.element >= 0.8 else {
             return insufficient(id: "recovery-half-life", title: "Recovery Half-Life")
         }

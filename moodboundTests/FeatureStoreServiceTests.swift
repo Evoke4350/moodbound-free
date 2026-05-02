@@ -66,6 +66,34 @@ final class FeatureStoreServiceTests: XCTestCase {
         XCTAssertEqual(volatility, 1.0, accuracy: 0.0001)
     }
 
+    func testSleepHoursOnlyOnFirstEntryOfEachDay() throws {
+        let day = calendar.date(from: DateComponents(year: 2026, month: 5, day: 1, hour: 9))!
+        let mid = calendar.date(byAdding: .hour, value: 6, to: day)!
+        let late = calendar.date(byAdding: .hour, value: 12, to: day)!
+
+        let e1 = MoodEntry(timestamp: day, moodLevel: 0, energy: 3, sleepHours: 7.5)
+        let e2 = MoodEntry(timestamp: mid, moodLevel: 0, energy: 3, sleepHours: 7.5)
+        let e3 = MoodEntry(timestamp: late, moodLevel: 0, energy: 3, sleepHours: 7.5)
+
+        let vectors = FeatureStoreService.buildVectors(entries: [e1, e2, e3], calendar: calendar)
+        XCTAssertEqual(vectors.count, 3)
+        XCTAssertEqual(vectors[0].sleepHours, 7.5)
+        XCTAssertEqual(vectors[1].sleepHours, 0, "Same-day duplicate must be zeroed")
+        XCTAssertEqual(vectors[2].sleepHours, 0, "Same-day duplicate must be zeroed")
+    }
+
+    func testSleepHoursPreservedAcrossDistinctDays() throws {
+        let day1 = calendar.date(from: DateComponents(year: 2026, month: 5, day: 1, hour: 9))!
+        let day2 = calendar.date(from: DateComponents(year: 2026, month: 5, day: 2, hour: 9))!
+
+        let e1 = MoodEntry(timestamp: day1, moodLevel: 0, energy: 3, sleepHours: 7.5)
+        let e2 = MoodEntry(timestamp: day2, moodLevel: 0, energy: 3, sleepHours: 6.0)
+
+        let vectors = FeatureStoreService.buildVectors(entries: [e1, e2], calendar: calendar)
+        XCTAssertEqual(vectors[0].sleepHours, 7.5)
+        XCTAssertEqual(vectors[1].sleepHours, 6.0)
+    }
+
     func testCircadianDrift7dUsesWrappedHourDistance() throws {
         let entries = Array(RealisticMoodDatasetFactory.makeScenario(days: 3).entries)
         let e1 = entries[0]

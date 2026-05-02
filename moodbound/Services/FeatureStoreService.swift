@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 struct TemporalFeatureVector: Equatable {
     let timestamp: Date
@@ -44,6 +45,20 @@ enum FeatureStoreService {
         calendar: Calendar = .current
     ) -> [TemporalFeatureVector] {
         let sorted = entries.sorted { $0.timestamp < $1.timestamp }
+        // Sleep is a once-per-night measurement that the entry form already
+        // inherits across same-day entries. Duplicating it into every vector
+        // makes downstream regularity / recovery scores look more stable
+        // than they are. Keep the sleep value on the *first* entry of each
+        // calendar day; subsequent same-day vectors get 0 (the project-wide
+        // "unknown" sentinel) so sleep-aware services treat them as missing.
+        var earliestEntryIDByDay: [Date: PersistentIdentifier] = [:]
+        for entry in sorted {
+            let day = calendar.startOfDay(for: entry.timestamp)
+            if earliestEntryIDByDay[day] == nil {
+                earliestEntryIDByDay[day] = entry.persistentModelID
+            }
+        }
+
         return sorted.map { entry in
             let window7d = window(
                 entries: sorted,
@@ -58,10 +73,14 @@ enum FeatureStoreService {
                 calendar: calendar
             )
 
+            let day = calendar.startOfDay(for: entry.timestamp)
+            let isFirstOfDay = earliestEntryIDByDay[day] == entry.persistentModelID
+            let sleepValue = isFirstOfDay ? entry.sleepHours : 0
+
             return TemporalFeatureVector(
                 timestamp: entry.timestamp,
                 moodLevel: Double(entry.moodLevel),
-                sleepHours: entry.sleepHours,
+                sleepHours: sleepValue,
                 energy: Double(entry.energy),
                 anxiety: Double(entry.anxiety),
                 irritability: Double(entry.irritability),

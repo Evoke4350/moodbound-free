@@ -58,14 +58,22 @@ enum HealthKitService {
 
     // MARK: - Read: Sleep
 
-    /// Fetches total sleep hours for the most recent night.
+    /// Wake gap (seconds) tolerated when stitching adjacent asleep intervals
+    /// into a single "main sleep" block. 60 min is enough to swallow normal
+    /// brief awakenings without merging an early-evening sleep onto a
+    /// morning nap.
+    private static let mainSleepWakeTolerance: TimeInterval = 60 * 60
+
+    /// Fetches the duration of last night's *main sleep block*, in hours.
     ///
-    /// Window: 6 PM yesterday → 2 PM today. End extended past noon so late
-    /// risers / shift workers still register. Counts only `asleep*` stages
-    /// (ignores `inBed` and `awake`), unions overlapping intervals so
-    /// multi-source data (Watch + 3rd-party) doesn't double-count, and
-    /// clips to the window so a sample whose `startDate` falls before
-    /// the window edge still contributes its in-window portion.
+    /// Window: 6 PM yesterday → 2 PM today. We pick the single longest
+    /// contiguous asleep block (allowing brief wake gaps up to
+    /// `mainSleepWakeTolerance`), so a 1 PM nap doesn't get added on top
+    /// of an 11 PM–7 AM night. Counts only `asleep*` stages (ignores
+    /// `inBed` and `awake`), unions overlapping intervals so multi-source
+    /// data (Watch + 3rd-party) doesn't double-count, and clips to the
+    /// window so a sample whose `startDate` is before the window still
+    /// contributes its in-window portion.
     static func fetchLastNightSleepHours(referenceDate: Date = Date()) async -> Double? {
         guard isAvailable else { return nil }
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
@@ -115,21 +123,30 @@ enum HealthKitService {
                 }
                 .sorted { $0.0 < $1.0 }
 
+            // Merge intervals when they overlap OR are separated by a brief
+            // wake gap (≤ mainSleepWakeTolerance). The gap tolerance turns
+            // "asleep → 30-min middle-of-night wake → asleep" into one
+            // block, which matches how a person reports their night's
+            // sleep, while still keeping a 1 PM nap separate from an 11 PM
+            // start.
             var merged: [(Date, Date)] = []
             for interval in asleepIntervals {
-                if let last = merged.last, interval.0 <= last.1 {
+                if let last = merged.last,
+                   interval.0.timeIntervalSince(last.1) <= mainSleepWakeTolerance {
                     merged[merged.count - 1] = (last.0, max(last.1, interval.1))
                 } else {
                     merged.append(interval)
                 }
             }
 
-            let totalSeconds = merged.reduce(0.0) { sum, interval in
-                sum + interval.1.timeIntervalSince(interval.0)
-            }
+            // Pick the longest stitched block as "main sleep". Summing all
+            // blocks would let a daytime nap inflate last night's total.
+            let mainSeconds = merged
+                .map { $0.1.timeIntervalSince($0.0) }
+                .max() ?? 0
 
-            guard totalSeconds > 0 else { return nil }
-            let hours = totalSeconds / 3600.0
+            guard mainSeconds > 0 else { return nil }
+            let hours = mainSeconds / 3600.0
             let clamped = min(max(hours, 0), 16)
             return (clamped * 2).rounded() / 2
         } catch {
