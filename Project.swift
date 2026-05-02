@@ -11,7 +11,7 @@ let project = Project(
             bundleId: "dev.tuist.Moodbound",
             deploymentTargets: .iOS("17.0"),
             infoPlist: .extendingDefault(with: [
-                "CFBundleShortVersionString": .string("1.2.1"),
+                "CFBundleShortVersionString": .string("1.2.2"),
                 "CFBundleVersion": .string("20"),
                 "CFBundleIconName": .string("AppIcon"),
                 "UILaunchScreen": .dictionary([:]),

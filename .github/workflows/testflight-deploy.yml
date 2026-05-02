@@ -102,12 +102,21 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
-          xcrun altool \
+          # altool sometimes exits 0 even on Apple-side validation
+          # rejections (e.g. duplicate version string). Capture output
+          # and grep for failure markers so the step actually fails when
+          # the upload didn't really go through.
+          set -o pipefail
+          out=$(xcrun altool \
             --upload-app \
             --type ios \
             --file build/export/moodbound.ipa \
             --apiKey "$ASC_KEY_ID" \
-            --apiIssuer "$ASC_ISSUER_ID"
+            --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tee /dev/stderr)
+          if echo "$out" | grep -qE "VALIDATION_ERROR|Validation failed|ERROR ITMS"; then
+            echo "::error::altool reported a validation failure — failing the step."
+            exit 1
+          fi
           echo "Upload complete. Build $BUILD_NUMBER submitted to TestFlight."
 
       - name: Cleanup secrets
