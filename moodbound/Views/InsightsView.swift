@@ -5,6 +5,7 @@ struct InsightsView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Query(sort: \MoodEntry.timestamp, order: .reverse) private var entries: [MoodEntry]
     @State private var showingSafetyPlan = false
+    @State private var showingLifeChart = false
     @AppStorage(AppClock.overrideTimestampKey) private var overrideTimestamp: Double = 0
 
     var body: some View {
@@ -27,6 +28,9 @@ struct InsightsView: View {
             .navigationTitle("Insights")
             .sheet(isPresented: $showingSafetyPlan) {
                 SafetyPlanView()
+            }
+            .sheet(isPresented: $showingLifeChart) {
+                LifeChartView()
             }
         }
         .animation(.smooth(duration: 0.3), value: entries.count)
@@ -590,6 +594,15 @@ struct InsightsView: View {
             Text(L10n.tr("insights.data_confidence.tooltip"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            Button {
+                showingLifeChart = true
+            } label: {
+                Label("Open life chart", systemImage: "chart.bar.xaxis")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("open-life-chart-button")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .moodCard()

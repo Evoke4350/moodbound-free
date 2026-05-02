@@ -50,4 +50,41 @@ final class BackfillFlowUITests: XCTestCase {
         // Home screen should now show the streak / outlook scaffold.
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 5))
     }
+
+    func testOpenLifeChart() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let understandButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Understood' OR label CONTAINS[c] 'I understand' OR label CONTAINS[c] 'Continue'")).firstMatch
+        if understandButton.waitForExistence(timeout: 3) {
+            understandButton.tap()
+        }
+
+        // Insights tab — depends on whether the bottom bar is tabs or
+        // navigation segments. Try both.
+        let insightsTab = app.tabBars.buttons["Insights"]
+        if insightsTab.waitForExistence(timeout: 3) {
+            insightsTab.tap()
+        }
+
+        // The "Open life chart" button only renders once the user has
+        // ≥3 entries (Insights gates on that). Skip if absent.
+        let openButton = app.buttons["open-life-chart-button"]
+        guard openButton.waitForExistence(timeout: 5) else {
+            throw XCTSkip("Insufficient entries for Insights to render the life chart entry point.")
+        }
+        openButton.tap()
+
+        XCTAssertTrue(app.navigationBars["Life chart"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls.firstMatch.waitForExistence(timeout: 3))
+
+        // Switch through window sizes.
+        let picker = app.segmentedControls["life-chart-window-picker"]
+        if picker.exists {
+            picker.buttons["1y"].tap()
+            picker.buttons["30d"].tap()
+        }
+
+        app.buttons["Done"].tap()
+    }
 }
