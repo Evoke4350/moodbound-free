@@ -28,13 +28,18 @@ struct CircadianFeatureVector: Equatable {
     /// random points 24h apart in the trailing 7-day window are in the
     /// same sleep/wake state. Range 0..100.
     let sleepRegularityIndex: Double?
-    /// Inter-daily Stability (Witting 1990) of step-count rhythm,
-    /// trailing 7d. Range 0..1; higher = more day-to-day repeatability.
+    /// Interdaily Stability (Witting 1990). Requires minute-level
+    /// activity data to be meaningful; without it the formula
+    /// degenerates to 1.0 unconditionally, which would mislead
+    /// downstream models. Stays nil until issue #10 Phase 3 lands
+    /// minute-level Apple Watch ingestion.
     let interdailyStability7d: Double?
-    /// Intra-daily Variability (Witting 1990) of step-count rhythm,
-    /// trailing 7d. Range 0..2; higher = more rest/activity
-    /// fragmentation.
-    let intradailyVariability7d: Double?
+    /// Variance of first-differences in nightly total sleep time over
+    /// the trailing 7d. Used as a sleep-irregularity proxy until true
+    /// Witting-1990 IV from minute-level activity is available. Note
+    /// the proxy measures sleep duration noise, not rest/activity
+    /// fragmentation — clinical interpretation differs.
+    let sleepDurationFirstDifferenceVariance7d: Double?
     /// Lim's "circadian phase Z-score" — z-normalized signed shift of
     /// today's sleep midpoint vs the trailing 7d mean. Positive =
     /// phase delay (linked to depression in Lim 2024); negative =
@@ -113,7 +118,7 @@ enum CircadianFeatureService {
                 calendar: calendar
             )
 
-            let (isVal, ivVal) = interdailyStabilityIntradailyVariability(
+            let firstDiffVariance = sleepDurationFirstDifferenceVariance(
                 day: day,
                 sleepHoursByDay: sleepHoursByDay,
                 calendar: calendar
@@ -138,8 +143,8 @@ enum CircadianFeatureService {
                 totalSleepMean7d: tstMean,
                 totalSleepStd7d: tstStd,
                 sleepRegularityIndex: sri,
-                interdailyStability7d: isVal,
-                intradailyVariability7d: ivVal,
+                interdailyStability7d: nil,
+                sleepDurationFirstDifferenceVariance7d: firstDiffVariance,
                 circadianPhaseZ: phaseZ,
                 activityRhythmAmplitude: activity
             )
@@ -259,36 +264,27 @@ enum CircadianFeatureService {
         }
     }
 
-    /// Interdaily Stability + Intradaily Variability (Witting 1990)
-    /// computed from total daily sleep hours over the trailing 7 days
-    /// (used as an activity-rhythm proxy when minute-level actigraphy
-    /// isn't available). Returns (IS, IV).
-    static func interdailyStabilityIntradailyVariability(
+    /// Variance of first-differences in nightly total sleep time over
+    /// the trailing 7 days, normalized by the window's total variance.
+    /// Stand-in for true Witting-1990 IV until minute-level actigraphy
+    /// lands. Returns nil when there isn't enough variance to normalize.
+    static func sleepDurationFirstDifferenceVariance(
         day: Date,
         sleepHoursByDay: [Date: Double],
         calendar: Calendar
-    ) -> (Double?, Double?) {
+    ) -> Double? {
         let series = trailing7Values(day: day, source: sleepHoursByDay, calendar: calendar)
-        guard series.count >= 3 else { return (nil, nil) }
+        guard series.count >= 3 else { return nil }
         let mu = mean(series) ?? 0
         let n = Double(series.count)
-        // Variance about overall mean
         let totalVar = series.reduce(0) { $0 + ($1 - mu) * ($1 - mu) } / n
-        guard totalVar > 0 else { return (nil, nil) }
+        guard totalVar > 0 else { return nil }
 
-        // IS: variance of the per-hour mean (here per-day) divided by total var.
-        // Single observation per day = degenerate, so report the
-        // simplified ratio 1.0 when fully stable, else <1.
-        let dayMeanVar = totalVar // identical when one obs/day
-        let isVal = min(1.0, dayMeanVar / totalVar)
-
-        // IV: sum of squared first-differences, normalized.
-        var ivNum = 0.0
+        var firstDiffSum = 0.0
         for i in 1..<series.count {
             let d = series[i] - series[i - 1]
-            ivNum += d * d
+            firstDiffSum += d * d
         }
-        let ivVal = (ivNum / (n - 1)) / totalVar
-        return (isVal, ivVal)
+        return (firstDiffSum / (n - 1)) / totalVar
     }
 }

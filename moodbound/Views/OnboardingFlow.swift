@@ -396,23 +396,25 @@ enum OnboardingPersistence {
             context.insert(SurveyResponseRecord(kind: .phq2, score: score, answers: phq2Answers, completedAt: now))
         }
 
+        var remindersToSync: ReminderSettings?
         if reminderOptIn {
             let reminders = try existingOrCreateReminderSettings(context: context)
             reminders.enabled = true
             reminders.hour = state.reminderHour
             reminders.minute = state.reminderMinute
             reminders.updatedAt = now
+            remindersToSync = reminders
         }
 
         try context.save()
 
-        if reminderOptIn {
-            // Best-effort schedule; failures don't block onboarding.
-            Task {
-                let reminders = try? context.fetch(FetchDescriptor<ReminderSettings>()).first
-                if let reminders {
-                    try? await ReminderScheduler.sync(with: reminders)
-                }
+        // Schedule on the main actor so we never touch the SwiftData
+        // model object from a background actor. ReminderScheduler.sync
+        // is async and yields off main while it talks to
+        // UNUserNotificationCenter, but the property reads stay on main.
+        if let remindersToSync {
+            Task { @MainActor in
+                try? await ReminderScheduler.sync(with: remindersToSync)
             }
         }
     }

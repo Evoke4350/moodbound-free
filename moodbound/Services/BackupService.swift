@@ -22,6 +22,11 @@ enum BackupService {
         var safetyPlan: SafetyPlanRecord?
         var contacts: [ContactRecord]
         var reminderSettings: ReminderRecord?
+        // Added in payload v2. Older v1 backups decode with these as
+        // nil/empty (Codable decodes optional missing fields as nil and
+        // missing arrays default to empty via the import path).
+        var onboarding: OnboardingRecord?
+        var surveys: [SurveyResponseRecordCodable]?
     }
 
     struct EntryRecord: Codable {
@@ -76,6 +81,26 @@ enum BackupService {
         var hour: Int
         var minute: Int
         var message: String
+        // v2 addition; older payloads decode without it.
+        var additionalMinutes: [Int]?
+    }
+
+    struct OnboardingRecord: Codable {
+        var hasCompleted: Bool
+        var completedAt: Date?
+        var diagnosisRawValue: String?
+        var reminderOptedIn: Bool
+        var reminderHour: Int
+        var reminderMinute: Int
+    }
+
+    struct SurveyResponseRecordCodable: Codable {
+        var kindRawValue: String
+        var totalScore: Int
+        var bandLabel: String
+        var screenPositive: Bool
+        var completedAt: Date
+        var answersJSON: String
     }
 
     static func exportJSON(context: ModelContext) throws -> Data {
@@ -85,9 +110,11 @@ enum BackupService {
         let plans = try context.fetch(FetchDescriptor<SafetyPlan>())
         let contacts = try context.fetch(FetchDescriptor<SupportContact>())
         let reminders = try context.fetch(FetchDescriptor<ReminderSettings>())
+        let onboarding = try context.fetch(FetchDescriptor<OnboardingState>())
+        let surveys = try context.fetch(FetchDescriptor<SurveyResponseRecord>())
 
         let payload = Payload(
-            version: 1,
+            version: 2,
             exportedAt: Date(),
             entries: entries.map { entry in
                 EntryRecord(
@@ -143,7 +170,28 @@ enum BackupService {
                     enabled: $0.enabled,
                     hour: $0.hour,
                     minute: $0.minute,
-                    message: $0.message
+                    message: $0.message,
+                    additionalMinutes: $0.additionalMinutes
+                )
+            },
+            onboarding: onboarding.first.map {
+                OnboardingRecord(
+                    hasCompleted: $0.hasCompleted,
+                    completedAt: $0.completedAt,
+                    diagnosisRawValue: $0.diagnosisRawValue,
+                    reminderOptedIn: $0.reminderOptedIn,
+                    reminderHour: $0.reminderHour,
+                    reminderMinute: $0.reminderMinute
+                )
+            },
+            surveys: surveys.map {
+                SurveyResponseRecordCodable(
+                    kindRawValue: $0.kindRawValue,
+                    totalScore: $0.totalScore,
+                    bandLabel: $0.bandLabel,
+                    screenPositive: $0.screenPositive,
+                    completedAt: $0.completedAt,
+                    answersJSON: $0.answersJSON
                 )
             }
         )
@@ -170,6 +218,8 @@ enum BackupService {
         try deleteAll(context: context, type: SafetyPlan.self)
         try deleteAll(context: context, type: SupportContact.self)
         try deleteAll(context: context, type: ReminderSettings.self)
+        try deleteAll(context: context, type: OnboardingState.self)
+        try deleteAll(context: context, type: SurveyResponseRecord.self)
 
         var medicationMap: [String: Medication] = [:]
         for record in payload.medications {
@@ -279,9 +329,45 @@ enum BackupService {
                     enabled: reminder.enabled,
                     hour: reminder.hour,
                     minute: reminder.minute,
-                    message: reminder.message
+                    message: reminder.message,
+                    additionalMinutes: reminder.additionalMinutes ?? []
                 )
             )
+        }
+
+        if let onboarding = payload.onboarding {
+            context.insert(
+                OnboardingState(
+                    hasCompleted: onboarding.hasCompleted,
+                    completedAt: onboarding.completedAt,
+                    diagnosisRawValue: onboarding.diagnosisRawValue,
+                    reminderOptedIn: onboarding.reminderOptedIn,
+                    reminderHour: onboarding.reminderHour,
+                    reminderMinute: onboarding.reminderMinute
+                )
+            )
+        }
+
+        for record in payload.surveys ?? [] {
+            guard let kind = SurveyKind(rawValue: record.kindRawValue) else { continue }
+            // Round-trip via SurveyScore so the new row keeps the same
+            // total / band / screenPositive bits the export preserved.
+            let answers = (try? JSONDecoder().decode(
+                [String: Int].self,
+                from: record.answersJSON.data(using: .utf8) ?? Data()
+            )) ?? [:]
+            let score = SurveyScore(
+                kind: kind,
+                total: record.totalScore,
+                band: record.bandLabel,
+                isScreenPositive: record.screenPositive
+            )
+            context.insert(SurveyResponseRecord(
+                kind: kind,
+                score: score,
+                answers: answers,
+                completedAt: record.completedAt
+            ))
         }
 
         try context.save()

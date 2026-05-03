@@ -91,7 +91,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Backup")
                 } footer: {
-                    Text("Export saves all entries, medications, triggers, safety plan, and settings as a JSON file. Import replaces all existing data.")
+                    Text("Export saves all entries, medications, triggers, safety plan, daily reminders (including extra times), onboarding choices, and baseline survey responses as a JSON file. Import replaces all existing data.")
                 }
 
 #if DEBUG

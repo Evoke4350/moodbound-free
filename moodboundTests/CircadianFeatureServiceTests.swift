@@ -169,7 +169,7 @@ final class CircadianFeatureServiceTests: XCTestCase {
                 vector.totalSleepStd7d,
                 vector.sleepRegularityIndex,
                 vector.interdailyStability7d,
-                vector.intradailyVariability7d,
+                vector.sleepDurationFirstDifferenceVariance7d,
                 vector.circadianPhaseZ,
                 vector.activityRhythmAmplitude,
             ] {
@@ -198,17 +198,18 @@ final class CircadianFeatureServiceTests: XCTestCase {
         }
     }
 
-    func testProperty_InterdailyStabilityInUnitInterval() {
+    func testInterdailyStabilityIsAlwaysNilUntilMinuteLevelDataLands() {
+        // The proxy is documented as always nil until issue #10 Phase 3
+        // wires minute-level Apple Watch ingestion. Asserts the contract
+        // so a future change that resurrects the degenerate-1.0 path is
+        // caught by tests.
         var rng = LCRNG(state: 0x15)
         var entries: [MoodEntry] = []
         for d in 1...30 {
             entries.append(entry(day: d, sleep: Double.random(in: 4...10, using: &rng)))
         }
         for vector in CircadianFeatureService.vectors(entries: entries) {
-            if let isVal = vector.interdailyStability7d {
-                XCTAssertGreaterThanOrEqual(isVal, 0)
-                XCTAssertLessThanOrEqual(isVal, 1)
-            }
+            XCTAssertNil(vector.interdailyStability7d, "IS must stay nil until Phase 3 minute-level data")
         }
     }
 }
