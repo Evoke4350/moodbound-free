@@ -16,7 +16,7 @@ final class BackfillFlowUITests: XCTestCase {
 
     func testSeed90DaysOfData() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-uitest"]
+        app.launchArguments += ["-uitest", "-uitest-skip-onboarding"]
         app.launch()
 
         // Dismiss the disclaimer splash if present.
@@ -57,7 +57,7 @@ final class BackfillFlowUITests: XCTestCase {
     /// crash from feature derivation surfaces as a UI test failure.
     func testSeed90DaysThenOpenInsightsExercisesFeaturePipeline() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-uitest"]
+        app.launchArguments += ["-uitest", "-uitest-skip-onboarding"]
         app.launch()
 
         let understandButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Understood' OR label CONTAINS[c] 'I understand' OR label CONTAINS[c] 'Continue'")).firstMatch
@@ -107,7 +107,7 @@ final class BackfillFlowUITests: XCTestCase {
 
     func testOpenLifeChart() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-uitest"]
+        app.launchArguments += ["-uitest", "-uitest-skip-onboarding"]
         app.launch()
 
         let understandButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Understood' OR label CONTAINS[c] 'I understand' OR label CONTAINS[c] 'Continue'")).firstMatch
