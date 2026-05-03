@@ -43,7 +43,6 @@ final class CircadianFeatureServiceTests: XCTestCase {
     func testSleepMidpointComputedFromWakeHourAndSleepHours() {
         // Wake at 7 AM after 7h sleep → midpoint 3.5
         let midpoint = CircadianFeatureService.approximateSleepMidpoint(
-            wakeOnDay: date(1),
             sleepHours: 7,
             wakeReference: date(1, hour: 7),
             calendar: calendar
@@ -55,7 +54,6 @@ final class CircadianFeatureServiceTests: XCTestCase {
         // Check-in at 3pm after 8h sleep would naively give midpoint 11,
         // but a 3pm reference is far past wake — cap at noon → midpoint 8.
         let midpoint = CircadianFeatureService.approximateSleepMidpoint(
-            wakeOnDay: date(1),
             sleepHours: 8,
             wakeReference: date(1, hour: 15),
             calendar: calendar

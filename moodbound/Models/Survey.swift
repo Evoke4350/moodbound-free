@@ -47,11 +47,11 @@ enum SurveyCatalog {
     private static let asrm = SurveyDefinition(
         kind: .asrm,
         title: "Altman Self-Rating Mania Scale",
-        intro: "Five quick questions about the past week. Answers help anchor your future check-ins.",
+        intro: "Over the past week — five short questions. Pick the option that best matches how you've felt.",
         questions: [
             SurveyQuestion(
                 id: "asrm-1-cheerfulness",
-                prompt: "Over the past week…",
+                prompt: "Cheerfulness",
                 answerLabels: [
                     "I do not feel happier or more cheerful than usual.",
                     "I occasionally feel happier or more cheerful than usual.",
@@ -62,7 +62,7 @@ enum SurveyCatalog {
             ),
             SurveyQuestion(
                 id: "asrm-2-confidence",
-                prompt: "Over the past week…",
+                prompt: "Self-confidence",
                 answerLabels: [
                     "I do not feel more self-confident than usual.",
                     "I occasionally feel more self-confident than usual.",
@@ -73,7 +73,7 @@ enum SurveyCatalog {
             ),
             SurveyQuestion(
                 id: "asrm-3-sleep",
-                prompt: "Over the past week…",
+                prompt: "Sleep need",
                 answerLabels: [
                     "I do not need less sleep than usual.",
                     "I occasionally need less sleep than usual.",
@@ -84,7 +84,7 @@ enum SurveyCatalog {
             ),
             SurveyQuestion(
                 id: "asrm-4-speech",
-                prompt: "Over the past week…",
+                prompt: "Speech",
                 answerLabels: [
                     "I do not talk more than usual.",
                     "I occasionally talk more than usual.",
@@ -95,7 +95,7 @@ enum SurveyCatalog {
             ),
             SurveyQuestion(
                 id: "asrm-5-activity",
-                prompt: "Over the past week…",
+                prompt: "Activity level",
                 answerLabels: [
                     "I have not been more active than usual.",
                     "I have occasionally been more active than usual.",

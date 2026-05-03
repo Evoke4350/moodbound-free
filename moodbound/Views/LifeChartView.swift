@@ -13,7 +13,7 @@ struct LifeChartView: View {
     @AppStorage(AppClock.overrideTimestampKey) private var overrideTimestamp: Double = 0
 
     @State private var window: LifeChartWindow = .days(90)
-    @State private var selectedDay: Date?
+    @State private var pendingSelection: DaySelection?
 
     private static let chartHeight: CGFloat = 200
     private static let zeroLineThickness: CGFloat = 1
@@ -40,7 +40,7 @@ struct LifeChartView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .sheet(item: selectedDayBinding) { selection in
+            .sheet(item: $pendingSelection) { selection in
                 DayDetailSheet(day: selection.day, entries: selection.entries)
                     .presentationDetents([.medium, .large])
             }
@@ -184,8 +184,13 @@ struct LifeChartView: View {
     private func annotationsOverlay(data: LifeChartData, barWidth: CGFloat, width: CGFloat) -> some View {
         Canvas { context, size in
             let zeroY = size.height / 2
-            // Map day → bar index for annotation placement.
-            let indexByDay = Dictionary(uniqueKeysWithValues: data.bars.enumerated().map { ($0.element.day, $0.offset) })
+            // Map day → bar index for annotation placement. Use
+            // first-wins de-duplication so a future reducer that emits
+            // two bars for the same day can't crash the renderer.
+            let indexByDay = Dictionary(
+                data.bars.enumerated().map { ($0.element.day, $0.offset) },
+                uniquingKeysWith: { first, _ in first }
+            )
 
             for annotation in data.annotations {
                 guard let index = indexByDay[annotation.day] else { continue }
@@ -234,22 +239,8 @@ struct LifeChartView: View {
                 guard index >= 0, index < data.bars.count else { return }
                 let bar = data.bars[index]
                 guard bar.entryCount > 0 else { return }
-                let dayEntries = entriesOnDay(bar.day)
-                selectedDay = bar.day
-                pendingSelection = DaySelection(day: bar.day, entries: dayEntries)
+                pendingSelection = DaySelection(day: bar.day, entries: entriesOnDay(bar.day))
             }
-    }
-
-    @State private var pendingSelection: DaySelection?
-
-    private var selectedDayBinding: Binding<DaySelection?> {
-        Binding(
-            get: { pendingSelection },
-            set: { newValue in
-                pendingSelection = newValue
-                if newValue == nil { selectedDay = nil }
-            }
-        )
     }
 
     private func entriesOnDay(_ day: Date) -> [MoodEntry] {

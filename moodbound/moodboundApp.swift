@@ -67,28 +67,31 @@ struct moodboundApp: App {
     /// decision before any view appears.
     @MainActor
     private func needsOnboarding() -> Bool {
-        if ProcessInfo.processInfo.arguments.contains("-uitest-skip-onboarding") {
-            return false
-        }
-        let context = container.mainContext
-        if ProcessInfo.processInfo.arguments.contains("-uitest-reset-onboarding") {
-            // Wipe any persisted state so the UI test always sees the
-            // flow, even on a re-run of the same simulator.
-            do {
-                let existing = try context.fetch(FetchDescriptor<OnboardingState>())
-                for state in existing { context.delete(state) }
-                try context.save()
-            } catch {
-                AppLogger.error("Failed to reset onboarding state", error: error)
-            }
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-uitest-skip-onboarding") { return false }
+        if args.contains("-uitest-reset-onboarding") {
+            resetOnboardingForUITest()
             return true
         }
+        let context = container.mainContext
         do {
             let states = try context.fetch(FetchDescriptor<OnboardingState>())
             return !(states.first?.hasCompleted ?? false)
         } catch {
             AppLogger.error("Failed to read OnboardingState", error: error)
             return false
+        }
+    }
+
+    @MainActor
+    private func resetOnboardingForUITest() {
+        let context = container.mainContext
+        do {
+            let existing = try context.fetch(FetchDescriptor<OnboardingState>())
+            for state in existing { context.delete(state) }
+            try context.save()
+        } catch {
+            AppLogger.error("Failed to reset onboarding state", error: error)
         }
     }
 }

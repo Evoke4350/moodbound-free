@@ -82,7 +82,6 @@ enum CircadianFeatureService {
             else { continue }
             sleepHoursByDay[day] = firstWithSleep.sleepHours
             sleepMidpointByDay[day] = approximateSleepMidpoint(
-                wakeOnDay: day,
                 sleepHours: firstWithSleep.sleepHours,
                 wakeReference: firstWithSleep.timestamp,
                 calendar: calendar
@@ -163,7 +162,6 @@ enum CircadianFeatureService {
     /// subtract half the sleep duration. Result wraps into the 0..24
     /// hour range; a 7h sleep ending at 7 AM yields midpoint 3.5.
     static func approximateSleepMidpoint(
-        wakeOnDay day: Date,
         sleepHours: Double,
         wakeReference: Date,
         calendar: Calendar

@@ -29,8 +29,12 @@ final class SurveyResponseRecord {
         self.bandLabel = score.band
         self.screenPositive = score.isScreenPositive
         self.completedAt = completedAt
+        let encoder = JSONEncoder()
+        // Stable byte-for-byte output so two semantically equal records
+        // hash identically (matters once we ever diff or sync).
+        encoder.outputFormatting = [.sortedKeys]
         self.answersJSON = (try? String(
-            data: JSONEncoder().encode(answers),
+            data: encoder.encode(answers),
             encoding: .utf8
         )) ?? "{}"
     }
