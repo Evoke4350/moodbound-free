@@ -8,6 +8,9 @@ struct SettingsView: View {
 
     @AppStorage("healthKitSleepEnabled") private var healthKitSleepEnabled = false
     @AppStorage("healthKitFullEnabled") private var healthKitFullEnabled = false
+    @AppStorage(AppLockSettings.appLockEnabledKey) private var appLockEnabled = false
+    @State private var appLockCapability: AppLockService.Capability = .unavailable
+    @State private var appLockEnableError: String?
     @State private var showingExporter = false
     @State private var showingImporter = false
     @State private var showingImportConfirm = false
@@ -76,6 +79,31 @@ struct SettingsView: View {
                     Text("Generate a PDF summary of your mood data to bring to an appointment.")
                 }
 
+                if appLockCapability != .unavailable {
+                    Section {
+                        Toggle(isOn: $appLockEnabled) {
+                            Label(appLockToggleLabel, systemImage: appLockIcon)
+                        }
+                        .onChange(of: appLockEnabled) { _, newValue in
+                            if newValue {
+                                Task { await verifyAppLockEnable() }
+                            } else {
+                                appLockEnableError = nil
+                            }
+                        }
+                        .accessibilityIdentifier("app-lock-toggle")
+                        if let appLockEnableError {
+                            Text(appLockEnableError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    } header: {
+                        Text("Privacy")
+                    } footer: {
+                        Text("Requires \(appLockToggleLabel) when you open moodbound or return after \(Int(AppLockSettings.backgroundGraceSeconds)) seconds away.")
+                    }
+                }
+
                 Section {
                     Button {
                         exportData()
@@ -119,6 +147,7 @@ struct SettingsView: View {
 #endif
             }
             .navigationTitle("Settings")
+            .task { appLockCapability = AppLockService.capability() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -201,6 +230,46 @@ struct SettingsView: View {
         }
     }
 #endif
+
+    private var appLockToggleLabel: String {
+        switch appLockCapability {
+        case .faceID: return "Require Face ID"
+        case .touchID: return "Require Touch ID"
+        case .opticID: return "Require Optic ID"
+        case .devicePasscodeOnly: return "Require device passcode"
+        case .unavailable: return "Require authentication"
+        }
+    }
+
+    private var appLockIcon: String {
+        switch appLockCapability {
+        case .faceID: return "faceid"
+        case .touchID: return "touchid"
+        case .opticID: return "opticid"
+        default: return "lock.fill"
+        }
+    }
+
+    /// Confirms the user can actually authenticate before locking them
+    /// in. If the auth prompt fails or the user cancels, we revert the
+    /// toggle so they don't lose access to the app.
+    @MainActor
+    private func verifyAppLockEnable() async {
+        appLockEnableError = nil
+        let outcome = await AppLockService.authenticate(reason: "Confirm to enable app lock")
+        switch outcome {
+        case .success:
+            break
+        case .cancelled:
+            appLockEnabled = false
+        case .failed(let reason):
+            appLockEnabled = false
+            appLockEnableError = reason
+        case .unavailable:
+            appLockEnabled = false
+            appLockEnableError = "App lock isn't available on this device."
+        }
+    }
 
     private func importData(result: Result<URL, Error>) {
         switch result {

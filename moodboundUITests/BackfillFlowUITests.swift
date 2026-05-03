@@ -29,13 +29,16 @@ final class BackfillFlowUITests: XCTestCase {
         app.buttons["settings-button"].tap()
 
         let seedButton = app.buttons["debug-seed-90-days"]
+        // Scroll the Settings list to reveal the Developer section.
+        // Without this the seed button can be below the rendered
+        // viewport when newer sections (Privacy, Reports) push it down.
+        for _ in 0..<3 where !seedButton.exists {
+            app.swipeUp()
+        }
         guard seedButton.waitForExistence(timeout: 5) else {
             throw XCTSkip("Debug seed button not present — non-DEBUG build.")
         }
-        // Scroll down if necessary to make the button hittable.
-        if !seedButton.isHittable {
-            app.swipeUp()
-        }
+        if !seedButton.isHittable { app.swipeUp() }
         seedButton.tap()
 
         // Success alert appears with "OK".
@@ -69,6 +72,7 @@ final class BackfillFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["settings-button"].waitForExistence(timeout: 5))
         app.buttons["settings-button"].tap()
         let seedButton = app.buttons["debug-seed-90-days"]
+        for _ in 0..<3 where !seedButton.exists { app.swipeUp() }
         guard seedButton.waitForExistence(timeout: 5) else {
             throw XCTSkip("Debug seed button not present — non-DEBUG build.")
         }

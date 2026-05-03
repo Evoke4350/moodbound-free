@@ -22,6 +22,27 @@ enum WhatsNewRegistry {
     /// whose `version` matches the running bundle's `CFBundleShortVersionString`.
     static let releases: [WhatsNewRelease] = [
         WhatsNewRelease(
+            version: "1.2.4",
+            headline: "More private. Easier to start. Cleaner backups.",
+            highlights: [
+                .init(
+                    icon: "faceid",
+                    title: "App lock",
+                    body: "Optional Face ID / Touch ID lock in Settings → Privacy. The app re-locks after 30 seconds in the background so an over-the-shoulder glance can't read your entries."
+                ),
+                .init(
+                    icon: "checkmark.circle.fill",
+                    title: "First-run setup",
+                    body: "New users get a six-step onboarding that captures a baseline ASRM and PHQ-2 so the insight cards have something to anchor against."
+                ),
+                .init(
+                    icon: "square.and.arrow.up.fill",
+                    title: "Backups now include everything",
+                    body: "Export / import preserves your onboarding choices, baseline survey scores, and any extra reminder times you've added. Older backup files still import."
+                ),
+            ]
+        ),
+        WhatsNewRelease(
             version: "1.2.3",
             headline: "Easier to read your patterns, easier to reach support.",
             highlights: [

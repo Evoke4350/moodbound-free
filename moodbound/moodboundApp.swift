@@ -33,6 +33,7 @@ struct moodboundApp: App {
                 ContentView()
                     .opacity(showingDisclaimer ? 0 : 1)
                     .whatsNewPresenter()
+                    .appLockGate()
                     .sheet(isPresented: $showingOnboarding) {
                         OnboardingFlow()
                             .interactiveDismissDisabled()
