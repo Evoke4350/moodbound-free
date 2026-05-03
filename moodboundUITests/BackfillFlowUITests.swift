@@ -57,6 +57,7 @@ final class BackfillFlowUITests: XCTestCase {
     /// crash from feature derivation surfaces as a UI test failure.
     func testSeed90DaysThenOpenInsightsExercisesFeaturePipeline() throws {
         let app = XCUIApplication()
+        app.launchArguments += ["-uitest"]
         app.launch()
 
         let understandButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Understood' OR label CONTAINS[c] 'I understand' OR label CONTAINS[c] 'Continue'")).firstMatch
@@ -106,6 +107,7 @@ final class BackfillFlowUITests: XCTestCase {
 
     func testOpenLifeChart() throws {
         let app = XCUIApplication()
+        app.launchArguments += ["-uitest"]
         app.launch()
 
         let understandButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Understood' OR label CONTAINS[c] 'I understand' OR label CONTAINS[c] 'Continue'")).firstMatch

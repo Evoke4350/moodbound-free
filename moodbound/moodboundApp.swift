@@ -29,6 +29,7 @@ struct moodboundApp: App {
             ZStack {
                 ContentView()
                     .opacity(showingDisclaimer ? 0 : 1)
+                    .whatsNewPresenter()
 
                 if showingDisclaimer {
                     DisclaimerSplashView {
